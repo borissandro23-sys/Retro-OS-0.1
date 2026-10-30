@@ -29,8 +29,8 @@ jobs:
           mkdir -p config/includes.binary/live
           touch config/includes.binary/live/.keep
           mkdir -p config/package-lists
-          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' > config/package-lists/retro-os-bootloader.list.chroot
-          printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
+          printf '%s\\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' > config/package-lists/retro-os-bootloader.list.chroot
+          printf '%s\\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components quiet splash"
 
       - name: Prepare complete ISOLINUX bootloader theme
@@ -64,7 +64,7 @@ jobs:
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
 
       - name: Build image
-        run: lb build
+        run: sudo lb build
 
       - name: Locate and stage ISO image
         shell: bash
@@ -83,9 +83,9 @@ jobs:
           fi
           cp "$ISO_FILE" retro-os-live-amd64.iso
           ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
-          printf '%s\n' "$ISO_LIST"
+          printf '%s\\n' "$ISO_LIST"
           for REQUIRED in isolinux.bin vmlinuz initrd.img; do
-            if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
+            if ! printf '%s\\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1
             fi

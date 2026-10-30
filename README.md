@@ -1,61 +1,49 @@
 # Retro OS 0.1
 
-A small educational operating-system project. The first milestone is a bootable **32-bit x86 BIOS ISO** that starts a freestanding C kernel and writes directly to VGA text memory.
+**Retro OS** is a Linux-based, bootable gaming system inspired by RetroArch and console-style gaming distributions.
 
-> This is an early prototype, not a daily-use operating system.
+The project uses the Linux kernel for hardware support and Libretro/RetroArch for emulation. Retro OS will provide its own startup experience, game library, controller setup and system settings.
 
-## Current milestone
+> Early development project. The current repository still contains a tiny freestanding-kernel experiment from the first prototype; it is not the bootable gaming system yet.
 
-- GRUB 2 / Multiboot2 boot protocol
-- Freestanding C kernel (no host operating-system runtime)
-- VGA text-mode welcome screen
-- Reproducible ISO build through GNU Make
-- GitHub Actions build artifact
+## Direction
 
-## Build on Ubuntu/Debian
+- **Base system:** Debian GNU/Linux (x86_64)
+- **Emulation:** RetroArch + Libretro cores
+- **Initial interface:** RetroArch Ozone/XMB menu, customized for Retro OS
+- **Input:** USB gamepads and keyboard
+- **Image format:** bootable x86_64 ISO for VirtualBox and PC hardware
 
-Install the tools:
+## Planned components
 
-```sh
-sudo apt update
-sudo apt install build-essential grub-pc-bin grub-common xorriso
-```
+| Component | Purpose |
+|---|---|
+| Linux kernel | Hardware, storage, USB, graphics and audio support |
+| RetroArch | Libretro frontend and core loader |
+| Libretro cores | Emulation of supported systems |
+| Retro OS shell | Startup, library, settings and shutdown experience |
+| Game library | Organize user-provided games, artwork and metadata |
 
-Build:
+## First milestones
 
-```sh
-make
-```
+1. [ ] Build a minimal x86_64 Linux live ISO
+2. [ ] Boot directly into a console-style Retro OS interface
+3. [ ] Include RetroArch and a small set of redistributable Libretro cores
+4. [ ] Configure keyboard and common USB gamepads
+5. [ ] Add game library scanning and per-system playlists
+6. [ ] Add persistent saves and configuration
+7. [ ] Test in VirtualBox and on physical PCs
 
-The image is created at `build/retro-os.iso`.
+## Build plan
 
-## Run in VirtualBox
+The first Linux-based image will be built with Debian Live tooling in GitHub Actions. This avoids requiring a Linux installation on the developer's Windows PC.
 
-1. Create a new VM named **Retro OS**.
-2. Select **Other / Unknown (32-bit)** as the OS type.
-3. Allocate 64–128 MB RAM.
-4. Under Storage, attach `build/retro-os.iso` to the virtual optical drive.
-5. Keep the VM firmware in BIOS mode (disable EFI).
-6. Start the VM.
+The old freestanding C kernel experiment is kept in the repository as a learning prototype. It is not used as the kernel of the Linux-based release.
 
-## Project layout
+## Legal notes
 
-- `boot/boot.S` — Multiboot2 header and 32-bit entry point
-- `kernel/kernel.c` — first C kernel and VGA text output
-- `linker.ld` — kernel memory layout
-- `grub/grub.cfg` — GRUB menu
-- `Makefile` — local build
-- `.github/workflows/build.yml` — automated ISO build
+RetroArch and Libretro cores have their own licenses. Each core must be distributed in accordance with its individual license. Retro OS will not include copyrighted game ROMs or BIOS files; users must provide files they are legally entitled to use.
 
-## Roadmap
+## Contributing
 
-1. [x] Boot a freestanding kernel and show a welcome screen
-2. [ ] Keyboard input and command shell
-3. [ ] Basic memory-map parsing and memory manager
-4. [ ] Interrupts and timer
-5. [ ] Simple graphics interface
-6. [ ] Filesystem support
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+See the repository issues and roadmap before proposing new features.

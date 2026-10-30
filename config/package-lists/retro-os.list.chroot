@@ -15,4 +15,3 @@ retroarch-joypad-autoconfig
 alsa-utils
 pulseaudio
 network-manager
- sudo

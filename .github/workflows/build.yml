@@ -122,6 +122,22 @@ jobs:
           print(f"Updated {count} sed substitutions")
           PY
 
+      - name: Fix live-build version sed delimiter
+        run: |
+          FILE=/usr/lib/live/build/lb_binary_syslinux
+          sudo python3 - "$FILE" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          old = "s~@LIVE_BUILD_VERSION@~${_LIVE_BUILD_VERSION}~g"
+          new = "s#@LIVE_BUILD_VERSION@#${_LIVE_BUILD_VERSION}#g"
+          if old not in text:
+              raise SystemExit("Expected LIVE_BUILD_VERSION substitution not found; refusing to patch")
+          path.write_text(text.replace(old, new, 1))
+          print("Changed LIVE_BUILD_VERSION substitution delimiter to #")
+          PY
+          sudo grep -n 'LIVE_BUILD_VERSION' "$FILE"
+
       - name: Enable Syslinux shell tracing for diagnosis
         run: |
           FILE=/usr/lib/live/build/lb_binary_syslinux

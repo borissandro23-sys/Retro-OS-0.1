@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Small Retro OS Libretro core downloader.
+
+Downloads only Linux x86_64 core packages from the official Libretro buildbot.
+The catalogue is intentionally a short allow-list; add entries only after
+checking the upstream package name and availability.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import pathlib
+import sys
+import urllib.error
+import urllib.request
+
+BASE = "https://buildbot.libretro.com/nightly/linux/x86_64/latest/"
+CORE_DIR = pathlib.Path(os.environ.get("RETRO_OS_CORE_DIR", "/home/retro/.config/retroarch/cores"))
+CATALOG = {
+    "snes9x": ("Nintendo SNES", "snes9x_libretro.so.zip"),
+    "fceumm": ("Nintendo NES", "fceumm_libretro.so.zip"),
+    "nestopia": ("Nintendo NES", "nestopia_libretro.so.zip"),
+    "gambatte": ("Game Boy / Game Boy Color", "gambatte_libretro.so.zip"),
+    "mgba": ("Game Boy Advance", "mgba_libretro.so.zip"),
+    "genesis_plus_gx": ("Sega Mega Drive / Genesis", "genesis_plus_gx_libretro.so.zip"),
+    "picodrive": ("Sega Mega Drive / Genesis", "picodrive_libretro.so.zip"),
+    "pcsx_rearmed": ("PlayStation", "pcsx_rearmed_libretro.so.zip"),
+    "mupen64plus_next": ("Nintendo 64", "mupen64plus_next_libretro.so.zip"),
+    "ppsspp": ("PlayStation Portable", "ppsspp_libretro.so.zip"),
+    "desmume": ("Nintendo DS", "desmume_libretro.so.zip"),
+    "melonds": ("Nintendo DS", "melonds_libretro.so.zip"),
+    "fbneo": ("Arcade", "fbneo_libretro.so.zip"),
+    "mame": ("Arcade", "mame_libretro.so.zip"),
+}
+
+def fetch(url: str) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "RetroOS-CoreManager/0.1"})
+    with urllib.request.urlopen(request, timeout=45) as response:
+        return response.read()
+
+def main() -> int:
+    if len(sys.argv) == 1 or sys.argv[1] in {"list", "--list"}:
+        for key, (system, filename) in CATALOG.items():
+            print(f"{key:20} {system:30} {filename}")
+        return 0
+
+    action = sys.argv[1]
+    if action == "installed":
+        for path in sorted(CORE_DIR.glob("*_libretro.so")):
+            print(path.name)
+        return 0
+    if action != "install" or len(sys.argv) != 3:
+        print("Usage: retro-core-manager [list|installed|install CORE_ID]", file=sys.stderr)
+        return 2
+
+    core_id = sys.argv[2].lower()
+    if core_id not in CATALOG:
+        print(f"Unknown core: {core_id}. Run 'retro-core-manager list'.", file=sys.stderr)
+        return 2
+
+    system, archive_name = CATALOG[core_id]
+    url = BASE + archive_name
+    print(f"Downloading {core_id} ({system}) from official Libretro buildbot...")
+    try:
+        archive = fetch(url)
+    except (urllib.error.URLError, TimeoutError) as error:
+        print(f"Download failed: {error}", file=sys.stderr)
+        return 1
+
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as package:
+            members = [name for name in package.namelist()
+                       if name.endswith("_libretro.so") and "/" not in name]
+            if len(members) != 1:
+                raise ValueError("Archive did not contain exactly one core shared library")
+            payload = package.read(members[0])
+    except (zipfile.BadZipFile, ValueError, KeyError) as error:
+        print(f"Invalid core archive: {error}", file=sys.stderr)
+        return 1
+
+    CORE_DIR.mkdir(parents=True, exist_ok=True)
+    target = CORE_DIR / pathlib.Path(members[0]).name
+    temp = target.with_suffix(target.suffix + ".part")
+    temp.write_bytes(payload)
+    temp.replace(target)
+    print(f"Installed: {target}")
+    print(f"SHA-256: {hashlib.sha256(payload).hexdigest()}")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

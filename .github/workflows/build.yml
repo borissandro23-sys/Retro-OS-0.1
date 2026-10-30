@@ -105,6 +105,22 @@ jobs:
           sudo grep -n -A 7 -B 1 'KERNEL="$(find binary/live' "$FILE"
           sudo grep -n -A 7 -B 1 'INITRD="$(find binary/live' "$FILE"
 
+      - name: Make Syslinux substitutions delimiter-safe
+        run: |
+          FILE=/usr/lib/live/build/lb_binary_syslinux
+          sudo python3 - "$FILE" <<'PY'
+          import pathlib, re, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          # Values substituted into Syslinux templates can contain '|'.
+          # Switch sed's substitution delimiter to '~' throughout this script.
+          patched, count = re.subn(r's\\|([^|\\n]*)\\|([^|\\n]*)\\|([g]?)',
+                                   r's~\\1~\\2~\\3', text)
+          if count == 0:
+              raise SystemExit("No sed substitutions found to make delimiter-safe")
+          path.write_text(patched)
+          print(f"Updated {count} sed substitution expressions")
+          PY
       - name: Build image
         run: sudo lb build
 

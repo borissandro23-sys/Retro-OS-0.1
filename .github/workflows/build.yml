@@ -227,13 +227,14 @@ jobs:
           echo "Found ISO: $ISO_FILE"
           cp "$ISO_FILE" retro-os-live-amd64.iso
           echo "Checking bootloader files inside ISO..."
-          xorriso -indev retro-os-live-amd64.iso -find / -name ldlinux.c32 -print
-          xorriso -indev retro-os-live-amd64.iso -find / -name isolinux.bin -print
-          xorriso -indev retro-os-live-amd64.iso -find / -name vesamenu.c32 -print
-          if ! xorriso -indev retro-os-live-amd64.iso -find / -name ldlinux.c32 -print 2>/dev/null | grep -q 'ldlinux.c32'; then
-            echo "::error::ldlinux.c32 is missing from the generated ISO"
-            exit 1
-          fi
+          ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f 2>&1)"
+          printf '%s\n' "$ISO_LIST"
+          for REQUIRED in ldlinux.c32 isolinux.bin vesamenu.c32; do
+            if ! printf '%s\n' "$ISO_LIST" | grep -Fq "$REQUIRED"; then
+              echo "::error::$REQUIRED is missing from the generated ISO"
+              exit 1
+            fi
+          done
           ls -lh retro-os-live-amd64.iso
 
       - name: Publish ISO artifact

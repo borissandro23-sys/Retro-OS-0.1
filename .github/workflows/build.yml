@@ -62,7 +62,7 @@ jobs:
           SOURCE=/usr/share/live/build/bootloaders/isolinux
           test -d "$SOURCE"
           mkdir -p config/bootloaders/isolinux
-          cp -aL "$SOURCE/." config/bootloaders/isolinux/
+          cp -a "$SOURCE/." config/bootloaders/isolinux/
           install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
           install -m 0644 /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo

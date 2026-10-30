@@ -20,7 +20,7 @@ jobs:
       - name: Install Debian Live build tools and Debian archive keys
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-utils cpio
+          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-utils isolinux cpio
 
       - name: Configure Debian Live image
         run: |
@@ -61,13 +61,13 @@ jobs:
         run: |
           SOURCE=/usr/share/live/build/bootloaders/isolinux
           test -d "$SOURCE"
-          mkdir -p config/bootloaders
-          cp -a "$SOURCE" config/bootloaders/isolinux
-          ln -sfn /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
-          ln -sfn /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
+          mkdir -p config/bootloaders/isolinux
+          cp -aL "$SOURCE/." config/bootloaders/isolinux/
+          install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
+          install -m 0644 /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
-          test -L config/bootloaders/isolinux/isolinux.bin
-          test -L config/bootloaders/isolinux/vesamenu.c32
+          test -s config/bootloaders/isolinux/isolinux.bin
+          test -s config/bootloaders/isolinux/vesamenu.c32
           test -s config/bootloaders/isolinux/bootlogo
 
       - name: Build image

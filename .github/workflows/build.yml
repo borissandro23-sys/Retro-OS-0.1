@@ -76,11 +76,12 @@ jobs:
         run: |
           FILE=/usr/lib/live/build/lb_binary_linux-image
           sudo test -f "$FILE"
-          echo "Original kernel move command:"
-          sudo grep -n -C 3 'binary/live/vmlinuz' "$FILE"
-          sudo sed -i '/binary\/live\/vmlinuz/i\\mkdir -p binary/live' "$FILE"
-          echo "Patched kernel move command:"
-          sudo grep -n -B 2 -A 2 'binary/live/vmlinuz' "$FILE"
+          echo "Kernel-related commands in live-build:"
+          sudo grep -n -E 'mv|vmlinuz|binary/live' "$FILE" || true
+          echo "Insert destination creation before move commands:"
+          sudo sed -i '/^[[:space:]]*mv[[:space:]]/i\\mkdir -p binary/live' "$FILE"
+          echo "Verify patched script:"
+          sudo grep -n -B 2 -A 2 -E 'mv|vmlinuz' "$FILE" || true
 
       - name: Build image
         run: sudo lb build

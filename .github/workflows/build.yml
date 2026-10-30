@@ -28,7 +28,7 @@ jobs:
           mkdir -p config/includes.binary/live
           touch config/includes.binary/live/.keep
           mkdir -p config/package-lists
-          printf '%s\n' 'isolinux' 'librsvg2-bin' > config/package-lists/retro-os-bootloader.list.chroot
+          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config \
             --ignore-system-defaults \

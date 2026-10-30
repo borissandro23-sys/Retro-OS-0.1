@@ -1,0 +1,33 @@
+name: Build Retro OS ISO
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential grub-pc-bin grub-common xorriso
+
+      - name: Build kernel and ISO
+        run: |
+          make clean
+          make
+          make check
+
+      - name: Upload bootable ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: retro-os-0.1-iso
+          path: build/retro-os.iso
+          if-no-files-found: error

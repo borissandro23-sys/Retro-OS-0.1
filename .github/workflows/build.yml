@@ -202,10 +202,17 @@ jobs:
         run: |
           set -euo pipefail
           echo "Searching for generated ISO files..."
-          find . -maxdepth 4 -type f -iname '*.iso' -not -path './.git/*' -print
-          ISO_FILE="$(find . -maxdepth 4 -type f -iname '*.iso' -not -path './.git/*' -print -quit)"
-          if [ -z "$ISO_FILE" ]; then
+          # live-build creates this image at the repository root.
+          if [ -f "./binary.hybrid.iso" ]; then
+            ISO_FILE="./binary.hybrid.iso"
+          else
+            # Ignore permission-denied diagnostics from chroot/cache directories.
+            ISO_FILE="$(find . -maxdepth 5 -type f -iname '*.iso' -not -path './.git/*' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$ISO_FILE" ] || [ ! -f "$ISO_FILE" ]; then
             echo "::error::No ISO file was generated"
+            echo "Top-level files:"
+            ls -lah
             exit 1
           fi
           echo "Found ISO: $ISO_FILE"

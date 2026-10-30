@@ -138,6 +138,22 @@ jobs:
           PY
           sudo grep -n 'LIVE_BUILD_VERSION' "$FILE"
 
+      - name: Normalize kernel versions for Syslinux splash
+        run: |
+          FILE=/usr/lib/live/build/lb_binary_syslinux
+          sudo python3 - "$FILE" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          old = 's~@LINUX_VERSIONS@~${_LINUX_VERSIONS}~g'
+          new = 's#@LINUX_VERSIONS@#$(printf "%s" "${_LINUX_VERSIONS}" | tr "\\n" " ")#g'
+          if old not in text:
+              raise SystemExit("Expected LINUX_VERSIONS substitution not found; refusing to patch")
+          path.write_text(text.replace(old, new, 1))
+          print("Normalized LINUX_VERSIONS newlines in sed replacement")
+          PY
+          sudo grep -n 'LINUX_VERSIONS' "$FILE"
+
       - name: Enable Syslinux shell tracing for diagnosis
         run: |
           FILE=/usr/lib/live/build/lb_binary_syslinux

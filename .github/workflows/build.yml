@@ -72,6 +72,16 @@ jobs:
           test -s config/bootloaders/isolinux/vesamenu.c32
           test -s config/bootloaders/isolinux/bootlogo
 
+      - name: Ensure live kernel destination exists
+        run: |
+          FILE=/usr/lib/live/build/lb_binary_linux-image
+          sudo test -f "$FILE"
+          echo "Original kernel move command:"
+          sudo grep -n -C 3 'binary/live/vmlinuz' "$FILE"
+          sudo sed -i '/binary\/live\/vmlinuz/i\\mkdir -p binary/live' "$FILE"
+          echo "Patched kernel move command:"
+          sudo grep -n -B 2 -A 2 'binary/live/vmlinuz' "$FILE"
+
       - name: Build image
         run: sudo lb build
 

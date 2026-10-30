@@ -20,11 +20,13 @@ jobs:
       - name: Install Debian Live build tools and Debian archive keys
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-utils
+          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-utils cpio
 
       - name: Configure Debian Live image
         run: |
           mkdir -p config/includes.chroot/etc/apt/sources.list.d
+          mkdir -p config/package-lists
+          printf '%s\\n' 'isolinux' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config \
             --ignore-system-defaults \
@@ -54,6 +56,19 @@ jobs:
             -e 's|/dists/${LB_DISTRIBUTION}/Contents-|/dists/${LB_DISTRIBUTION}/main/Contents-|g' \
             "$FILE"
           sudo grep -n 'Contents-' "$FILE"
+
+      - name: Prepare complete ISOLINUX bootloader theme
+        run: |
+          SOURCE=/usr/share/live/build/bootloaders/isolinux
+          test -d "$SOURCE"
+          mkdir -p config/bootloaders
+          cp -a "$SOURCE" config/bootloaders/isolinux
+          ln -sfn /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
+          ln -sfn /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
+          printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
+          test -L config/bootloaders/isolinux/isolinux.bin
+          test -L config/bootloaders/isolinux/vesamenu.c32
+          test -s config/bootloaders/isolinux/bootlogo
 
       - name: Build image
         run: sudo lb build

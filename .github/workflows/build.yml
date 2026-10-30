@@ -20,7 +20,7 @@ jobs:
       - name: Install Debian Live build tools and Debian archive keys
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-utils isolinux cpio
+          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio
 
       - name: Configure Debian Live image
         run: |
@@ -67,9 +67,18 @@ jobs:
           cp -a "$SOURCE/." config/bootloaders/isolinux/
           install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
           install -m 0644 /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
+          LDLINUX="$(find /usr/lib -type f -name ldlinux.c32 -print -quit)"
+          if [ -z "$LDLINUX" ]; then
+            echo "::error::ldlinux.c32 not found in installed Syslinux packages"
+            find /usr/lib -type f \( -name '*ldlinux*' -o -name 'vesamenu.c32' -o -name 'isolinux.bin' \) -print
+            exit 1
+          fi
+          install -m 0644 "$LDLINUX" config/bootloaders/isolinux/ldlinux.c32
+          echo "Using ldlinux.c32 from $LDLINUX"
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
           test -s config/bootloaders/isolinux/isolinux.bin
           test -s config/bootloaders/isolinux/vesamenu.c32
+          test -s config/bootloaders/isolinux/ldlinux.c32
           test -s config/bootloaders/isolinux/bootlogo
 
       - name: Patch Syslinux kernel selection
@@ -217,6 +226,14 @@ jobs:
           fi
           echo "Found ISO: $ISO_FILE"
           cp "$ISO_FILE" retro-os-live-amd64.iso
+          echo "Checking bootloader files inside ISO..."
+          xorriso -indev retro-os-live-amd64.iso -find / -name ldlinux.c32 -print
+          xorriso -indev retro-os-live-amd64.iso -find / -name isolinux.bin -print
+          xorriso -indev retro-os-live-amd64.iso -find / -name vesamenu.c32 -print
+          if ! xorriso -indev retro-os-live-amd64.iso -find / -name ldlinux.c32 -print 2>/dev/null | grep -q 'ldlinux.c32'; then
+            echo "::error::ldlinux.c32 is missing from the generated ISO"
+            exit 1
+          fi
           ls -lh retro-os-live-amd64.iso
 
       - name: Publish ISO artifact

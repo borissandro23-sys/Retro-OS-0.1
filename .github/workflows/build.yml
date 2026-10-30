@@ -19,10 +19,10 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install Debian Live build tools and Debian archive keys
+      - name: Install Debian Live build tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y sudo live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio
+          apt-get update
+          apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio grub-efi-amd64-bin
 
       - name: Configure Debian Live image
         run: |
@@ -55,53 +55,48 @@ jobs:
 
       - name: Prepare complete ISOLINUX bootloader theme
         run: |
+          set -eu
           SOURCE=/usr/share/live/build/bootloaders/isolinux
           test -d "$SOURCE"
           mkdir -p config/bootloaders/isolinux
           cp -a "$SOURCE/." config/bootloaders/isolinux/
           install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
-          install -m 0644 /usr/lib/syslinux/modules/bios/vesamenu.c32 config/bootloaders/isolinux/vesamenu.c32
-          LDLINUX="$(find /usr/lib -type f -name ldlinux.c32 -print -quit)"
-          if [ -z "$LDLINUX" ]; then
-            echo "::error::ldlinux.c32 not found in installed Syslinux packages"
-            find /usr/lib -type f \( -name '*ldlinux*' -o -name 'vesamenu.c32' -o -name 'isolinux.bin' \) -print
-            exit 1
-          fi
-          install -m 0644 "$LDLINUX" config/bootloaders/isolinux/ldlinux.c32
-          echo "Using ldlinux.c32 from $LDLINUX"
+          BIOS_MODULES=/usr/lib/syslinux/modules/bios
+          for MODULE in ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32; do
+            if [ ! -s "$BIOS_MODULES/$MODULE" ]; then
+              echo "::error::$MODULE not found in $BIOS_MODULES"
+              find /usr/lib -type f -name "$MODULE" -print
+              exit 1
+            fi
+            install -m 0644 "$BIOS_MODULES/$MODULE" "config/bootloaders/isolinux/$MODULE"
+          done
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
-          test -s config/bootloaders/isolinux/isolinux.bin
-          test -s config/bootloaders/isolinux/vesamenu.c32
-          test -s config/bootloaders/isolinux/ldlinux.c32
-          test -s config/bootloaders/isolinux/bootlogo
+          for REQUIRED in isolinux.bin ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32 bootlogo; do
+            test -s "config/bootloaders/isolinux/$REQUIRED"
+          done
 
       - name: Build image
-        run: sudo lb build
+        run: lb build
 
       - name: Locate and stage ISO image
         shell: bash
         run: |
           set -euo pipefail
           echo "Searching for generated ISO files..."
-          # live-build creates this image at the repository root.
           if [ -f "./binary.hybrid.iso" ]; then
             ISO_FILE="./binary.hybrid.iso"
           else
-            # Ignore permission-denied diagnostics from chroot/cache directories.
             ISO_FILE="$(find . -maxdepth 5 -type f -iname '*.iso' -not -path './.git/*' -print -quit 2>/dev/null || true)"
           fi
           if [ -z "$ISO_FILE" ] || [ ! -f "$ISO_FILE" ]; then
             echo "::error::No ISO file was generated"
-            echo "Top-level files:"
             ls -lah
             exit 1
           fi
-          echo "Found ISO: $ISO_FILE"
           cp "$ISO_FILE" retro-os-live-amd64.iso
-          echo "Checking bootloader files inside ISO..."
           ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
           printf '%s\n' "$ISO_LIST"
-          for REQUIRED in ldlinux.c32 isolinux.bin vesamenu.c32 BOOTX64.EFI; do
+          for REQUIRED in ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32 isolinux.bin BOOTX64.EFI vmlinuz initrd.img; do
             if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1

@@ -39,6 +39,8 @@ jobs:
             --initramfs live-boot \
             --security false \
             --binary-images iso-hybrid \
+            --bootloaders "syslinux grub-efi" \
+            --uefi-secure-boot disable \
             --debian-installer false \
             --archive-areas "main contrib non-free non-free-firmware" \
             --keyring-packages debian-archive-keyring \
@@ -227,10 +229,10 @@ jobs:
           echo "Found ISO: $ISO_FILE"
           cp "$ISO_FILE" retro-os-live-amd64.iso
           echo "Checking bootloader files inside ISO..."
-          ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f 2>&1)"
+          ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
           printf '%s\n' "$ISO_LIST"
-          for REQUIRED in ldlinux.c32 isolinux.bin vesamenu.c32; do
-            if ! printf '%s\n' "$ISO_LIST" | grep -Fq "$REQUIRED"; then
+          for REQUIRED in ldlinux.c32 isolinux.bin vesamenu.c32 BOOTX64.EFI; do
+            if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1
             fi

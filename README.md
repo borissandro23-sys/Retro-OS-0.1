@@ -34,6 +34,18 @@ The project uses the Linux kernel for hardware support and Libretro/RetroArch fo
 6. [ ] Add persistent saves and configuration
 7. [ ] Test in VirtualBox and on physical PCs
 
+## Downloading Libretro cores
+
+Retro OS will keep the ISO small and download cores separately. The initial `tools/retro-core-manager` prototype lists a curated set of Linux x86_64 cores and can install a selected core from the official Libretro buildbot:
+
+```sh
+retro-core-manager list
+retro-core-manager install snes9x
+retro-core-manager installed
+```
+
+This downloader is a prototype and is not yet wired into the graphical interface. The list is an allow-list, not a guarantee that every upstream package is currently available. It downloads Linux `.so` builds, never Windows `.dll` files.
+
 ## Build plan
 
 The first Linux-based image will be built with Debian Live tooling in GitHub Actions. This avoids requiring a Linux installation on the developer's Windows PC.

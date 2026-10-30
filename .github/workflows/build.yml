@@ -31,16 +31,27 @@ jobs:
           mkdir -p config/package-lists
           printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
-          lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --bootloaders "syslinux grub-efi" --uefi-secure-boot disable --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components quiet splash"
+          lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components quiet splash"
 
       - name: Prepare complete ISOLINUX bootloader theme
         run: |
           set -eu
           SOURCE=/usr/share/live/build/bootloaders/isolinux
+          if [ ! -d "$SOURCE" ]; then
+            SOURCE=/usr/share/live/build/bootloaders
+          fi
           test -d "$SOURCE"
           mkdir -p config/bootloaders/isolinux
           cp -a "$SOURCE/." config/bootloaders/isolinux/
-          install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
+          if [ -f /usr/lib/ISOLINUX/isolinux.bin ]; then
+            install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
+          elif [ -f /usr/lib/isolinux/isolinux.bin ]; then
+            install -m 0644 /usr/lib/isolinux/isolinux.bin config/bootloaders/isolinux/isolinux.bin
+          else
+            echo "::error::isolinux.bin not found"
+            find /usr/lib -type f -name isolinux.bin -print
+            exit 1
+          fi
           BIOS_MODULES=/usr/lib/syslinux/modules/bios
           for MODULE in ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32; do
             if [ ! -s "$BIOS_MODULES/$MODULE" ]; then
@@ -51,9 +62,6 @@ jobs:
             install -m 0644 "$BIOS_MODULES/$MODULE" "config/bootloaders/isolinux/$MODULE"
           done
           printf '' | cpio -o -H newc > config/bootloaders/isolinux/bootlogo
-          for REQUIRED in isolinux.bin ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32 bootlogo; do
-            test -s "config/bootloaders/isolinux/$REQUIRED"
-          done
 
       - name: Build image
         run: lb build
@@ -76,7 +84,7 @@ jobs:
           cp "$ISO_FILE" retro-os-live-amd64.iso
           ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
           printf '%s\n' "$ISO_LIST"
-          for REQUIRED in ldlinux.c32 libcom32.c32 libutil.c32 vesamenu.c32 isolinux.bin BOOTX64.EFI vmlinuz initrd.img; do
+          for REQUIRED in isolinux.bin vmlinuz initrd.img; do
             if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1

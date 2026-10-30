@@ -44,7 +44,7 @@ jobs:
             --bootappend-live "boot=live components quiet splash"
 
       - name: Build image
-        run: sudo lb build
+        run: lb build
 
       - name: Publish ISO artifact
         uses: actions/upload-artifact@v4

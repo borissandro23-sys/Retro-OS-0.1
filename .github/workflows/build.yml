@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    container:
+      image: debian:bookworm
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -20,7 +22,7 @@ jobs:
       - name: Install Debian Live build tools and Debian archive keys
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio
+          sudo apt-get install -y sudo live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio
 
       - name: Configure Debian Live image
         run: |
@@ -28,7 +30,7 @@ jobs:
           mkdir -p config/includes.binary/live
           touch config/includes.binary/live/.keep
           mkdir -p config/package-lists
-          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' > config/package-lists/retro-os-bootloader.list.chroot
+          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config \
             --ignore-system-defaults \
@@ -51,16 +53,6 @@ jobs:
             --mirror-binary-security http://security.debian.org/debian-security \
             --bootappend-live "boot=live components quiet splash"
 
-      - name: Fix Debian Contents index path in live-build
-        run: |
-          FILE=/usr/lib/live/build/lb_chroot_linux-image
-          sudo test -f "$FILE"
-          sudo sed -i \
-            -e 's|/dists/${LB_PARENT_DISTRIBUTION}/Contents-|/dists/${LB_PARENT_DISTRIBUTION}/main/Contents-|g' \
-            -e 's|/dists/${LB_DISTRIBUTION}/Contents-|/dists/${LB_DISTRIBUTION}/main/Contents-|g' \
-            "$FILE"
-          sudo grep -n 'Contents-' "$FILE"
-
       - name: Prepare complete ISOLINUX bootloader theme
         run: |
           SOURCE=/usr/share/live/build/bootloaders/isolinux
@@ -82,128 +74,6 @@ jobs:
           test -s config/bootloaders/isolinux/vesamenu.c32
           test -s config/bootloaders/isolinux/ldlinux.c32
           test -s config/bootloaders/isolinux/bootlogo
-
-      - name: Patch Syslinux kernel selection
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo test -f "$FILE"
-          echo "Original kernel move commands:"
-          sudo grep -n -E 'mv binary/live/(vmlinuz|initrd)' "$FILE"
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          old_kernel = "mv binary/live/vmlinuz-* binary/live/vmlinuz"
-          new_kernel = """KERNEL="$(find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -n 1)"
-          if [ -z "$KERNEL" ]; then
-              echo "No Linux kernel found in binary/live" >&2
-              exit 1
-          fi
-          mv "$KERNEL" binary/live/vmlinuz"""
-          old_initrd = "mv binary/live/initrd.img-* binary/live/initrd.img"
-          new_initrd = """INITRD="$(find binary/live -maxdepth 1 -type f -name 'initrd.img-*' | sort -V | tail -n 1)"
-          if [ -z "$INITRD" ]; then
-              echo "No initrd found in binary/live" >&2
-              exit 1
-          fi
-          mv "$INITRD" binary/live/initrd.img"""
-          if old_kernel not in text or old_initrd not in text:
-              raise SystemExit("Expected Syslinux kernel/initrd move commands were not found; refusing to patch")
-          text = text.replace(old_kernel, new_kernel, 1).replace(old_initrd, new_initrd, 1)
-          path.write_text(text)
-          PY
-          echo "Patched kernel selection:"
-          sudo grep -n -A 7 -B 1 'KERNEL="$(find binary/live' "$FILE"
-          sudo grep -n -A 7 -B 1 'INITRD="$(find binary/live' "$FILE"
-
-      - name: Make Syslinux substitutions delimiter-safe
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, re, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          # Change only sed substitutions whose delimiter is a literal pipe.
-          # Keep the match on one line so unrelated shell code is untouched.
-          pattern = re.compile(r's\|([^|\n]*)\|([^|\n]*)\|([g]?)')
-          patched, count = pattern.subn(r's~\1~\2~\3', text)
-          if count == 0:
-              raise SystemExit("No pipe-delimited sed substitutions found")
-          path.write_text(patched)
-          print(f"Updated {count} sed substitutions")
-          PY
-
-      - name: Fix live-build version sed delimiter
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          old = "s~@LIVE_BUILD_VERSION@~${_LIVE_BUILD_VERSION}~g"
-          new = "s#@LIVE_BUILD_VERSION@#${_LIVE_BUILD_VERSION}#g"
-          if old not in text:
-              raise SystemExit("Expected LIVE_BUILD_VERSION substitution not found; refusing to patch")
-          text = text.replace(old, new, 1)
-          path.write_text(text)
-          print("Changed LIVE_BUILD_VERSION substitution delimiter to #")
-          PY
-          sudo grep -n 'LIVE_BUILD_VERSION' "$FILE"
-
-      - name: Normalize kernel versions for Syslinux splash
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          old = 's~@LINUX_VERSIONS@~${_LINUX_VERSIONS}~g'
-          new = 's#@LINUX_VERSIONS@#$(printf "%s" "${_LINUX_VERSIONS}" | tr "\\n" " ")#g'
-          if old not in text:
-              raise SystemExit("Expected LINUX_VERSIONS substitution not found; refusing to patch")
-          path.write_text(text.replace(old, new, 1))
-          print("Normalized LINUX_VERSIONS newlines in sed replacement")
-          PY
-          sudo grep -n 'LINUX_VERSIONS' "$FILE"
-
-      - name: Use the available librsvg converter in live-build
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          old = "rsvg --format png"
-          new = "rsvg-convert --format png"
-          if old not in text:
-              raise SystemExit("Expected rsvg splash conversion command not found; refusing to patch")
-          text = text.replace(old, new, 1)
-          bad = "rsvg-convert --format png --height 480 --width 640 splash.svg splash.png"
-          good = "rsvg-convert --format png --height 480 --width 640 --output splash.png splash.svg"
-          if bad not in text:
-              raise SystemExit("Expected splash conversion invocation not found after converter replacement; refusing to patch")
-          text = text.replace(bad, good, 1)
-          path.write_text(text)
-          print("Patched splash conversion to use rsvg-convert with --output")
-          PY
-          sudo grep -n 'rsvg' "$FILE"
-
-      - name: Enable Syslinux shell tracing for diagnosis
-        run: |
-          FILE=/usr/lib/live/build/lb_binary_syslinux
-          sudo python3 - "$FILE" <<'PY'
-          import pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          lines = path.read_text().splitlines()
-          if not lines or not lines[0].startswith("#!"):
-              raise SystemExit("Unexpected Syslinux script header")
-          if len(lines) > 1 and lines[1].strip() == "set -x":
-              print("Shell tracing already enabled")
-          else:
-              lines.insert(1, "set -x")
-              path.write_text("\n".join(lines) + "\n")
-              print("Enabled shell tracing in lb_binary_syslinux")
-          PY
 
       - name: Build image
         run: sudo lb build

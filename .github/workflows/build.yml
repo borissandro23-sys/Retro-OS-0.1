@@ -25,10 +25,11 @@ jobs:
       - name: Configure Debian Live image
         run: |
           lb config \
+            --mode debian \
             --distribution bookworm \
             --architectures amd64 \
             --linux-packages linux-image \
-            --live-packages "live-boot live-config" \
+            --initramfs live-boot \
             --binary-images iso-hybrid \
             --debian-installer false \
             --archive-areas "main contrib non-free non-free-firmware" \

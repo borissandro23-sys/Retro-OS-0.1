@@ -72,15 +72,38 @@ jobs:
           test -s config/bootloaders/isolinux/vesamenu.c32
           test -s config/bootloaders/isolinux/bootlogo
 
-      - name: Ensure live kernel destination exists
+      - name: Patch Syslinux kernel selection
         run: |
-          FILE=/usr/lib/live/build/lb_binary_linux-image
+          FILE=/usr/lib/live/build/lb_binary_syslinux
           sudo test -f "$FILE"
-          echo "Find live kernel destination:"
-          sudo grep -n -C 4 'DESTDIR="binary/live"' "$FILE"
-          sudo sed -i '/DESTDIR="binary\/live"/a\        mkdir -p "${DESTDIR}"' "$FILE"
-          echo "Verify directory creation is in the script:"
-          sudo grep -n -B 3 -A 3 'mkdir -p "${DESTDIR}"' "$FILE"
+          echo "Original kernel move commands:"
+          sudo grep -n -E 'mv binary/live/(vmlinuz|initrd)' "$FILE"
+          sudo python3 - "$FILE" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          old_kernel = "mv binary/live/vmlinuz-* binary/live/vmlinuz"
+          new_kernel = """KERNEL="$(find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -n 1)"
+          if [ -z "$KERNEL" ]; then
+              echo "No Linux kernel found in binary/live" >&2
+              exit 1
+          fi
+          mv "$KERNEL" binary/live/vmlinuz"""
+          old_initrd = "mv binary/live/initrd.img-* binary/live/initrd.img"
+          new_initrd = """INITRD="$(find binary/live -maxdepth 1 -type f -name 'initrd.img-*' | sort -V | tail -n 1)"
+          if [ -z "$INITRD" ]; then
+              echo "No initrd found in binary/live" >&2
+              exit 1
+          fi
+          mv "$INITRD" binary/live/initrd.img"""
+          if old_kernel not in text or old_initrd not in text:
+              raise SystemExit("Expected Syslinux kernel/initrd move commands were not found; refusing to patch")
+          text = text.replace(old_kernel, new_kernel, 1).replace(old_initrd, new_initrd, 1)
+          path.write_text(text)
+          PY
+          echo "Patched kernel selection:"
+          sudo grep -n -A 7 -B 1 'KERNEL="$(find binary/live' "$FILE"
+          sudo grep -n -A 7 -B 1 'INITRD="$(find binary/live' "$FILE"
 
       - name: Build image
         run: sudo lb build

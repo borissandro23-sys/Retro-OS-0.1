@@ -112,15 +112,16 @@ jobs:
           import pathlib, re, sys
           path = pathlib.Path(sys.argv[1])
           text = path.read_text()
-          # Values substituted into Syslinux templates can contain '|'.
-          # Switch sed's substitution delimiter to '~' throughout this script.
-          patched, count = re.subn(r's\\|([^|\\n]*)\\|([^|\\n]*)\\|([g]?)',
-                                   r's~\\1~\\2~\\3', text)
+          # Change only sed substitutions whose delimiter is a literal pipe.
+          # Keep the match on one line so unrelated shell code is untouched.
+          pattern = re.compile(r's\|([^|\n]*)\|([^|\n]*)\|([g]?)')
+          patched, count = pattern.subn(r's~\1~\2~\3', text)
           if count == 0:
-              raise SystemExit("No sed substitutions found to make delimiter-safe")
+              raise SystemExit("No pipe-delimited sed substitutions found")
           path.write_text(patched)
-          print(f"Updated {count} sed substitution expressions")
+          print(f"Updated {count} sed substitutions")
           PY
+
       - name: Build image
         run: sudo lb build
 

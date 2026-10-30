@@ -133,7 +133,13 @@ jobs:
           new = "s#@LIVE_BUILD_VERSION@#${_LIVE_BUILD_VERSION}#g"
           if old not in text:
               raise SystemExit("Expected LIVE_BUILD_VERSION substitution not found; refusing to patch")
-          path.write_text(text.replace(old, new, 1))
+          text = text.replace(old, new, 1)
+          bad = "rsvg-convert --format png --height 480 --width 640 splash.svg splash.png"
+          good = "rsvg-convert --format png --height 480 --width 640 --output splash.png splash.svg"
+          if bad not in text:
+              raise SystemExit("Expected splash conversion invocation not found; refusing to patch")
+          text = text.replace(bad, good, 1)
+          path.write_text(text)
           print("Changed LIVE_BUILD_VERSION substitution delimiter to #")
           PY
           sudo grep -n 'LIVE_BUILD_VERSION' "$FILE"

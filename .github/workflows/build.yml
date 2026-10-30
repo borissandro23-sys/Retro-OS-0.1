@@ -27,6 +27,7 @@ jobs:
           lb config \
             --distribution bookworm \
             --architectures amd64 \
+            --linux-packages linux-image \
             --binary-images iso-hybrid \
             --debian-installer false \
             --archive-areas "main contrib non-free non-free-firmware" \

@@ -1,0 +1,18 @@
+# Base graphical session
+linux-image-amd64
+systemd-sysv
+xorg
+xserver-xorg-video-all
+xserver-xorg-input-all
+openbox
+lightdm
+dbus-x11
+# Gaming frontend and input
+retroarch
+retroarch-assets
+retroarch-joypad-autoconfig
+# Utilities
+alsa-utils
+pulseaudio
+network-manager
+ sudo

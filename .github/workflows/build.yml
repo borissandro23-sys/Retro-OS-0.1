@@ -122,6 +122,23 @@ jobs:
           print(f"Updated {count} sed substitutions")
           PY
 
+      - name: Enable Syslinux shell tracing for diagnosis
+        run: |
+          FILE=/usr/lib/live/build/lb_binary_syslinux
+          sudo python3 - "$FILE" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          lines = path.read_text().splitlines()
+          if not lines or not lines[0].startswith("#!"):
+              raise SystemExit("Unexpected Syslinux script header")
+          if len(lines) > 1 and lines[1].strip() == "set -x":
+              print("Shell tracing already enabled")
+          else:
+              lines.insert(1, "set -x")
+              path.write_text("\n".join(lines) + "\n")
+              print("Enabled shell tracing in lb_binary_syslinux")
+          PY
+
       - name: Build image
         run: sudo lb build
 

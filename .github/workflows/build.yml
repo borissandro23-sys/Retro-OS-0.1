@@ -39,6 +39,25 @@ jobs:
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
           sudo grep -q '/main/Contents-' /usr/lib/live/build/lb_chroot_linux-image
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/usr/lib/live/build/lb_binary_syslinux")
+          s = p.read_text()
+          marker = "\\t\\t\\t mv binary/live/vmlinuz-* binary/live/vmlinuz"
+          if marker not in s:
+              marker = "\\t\\t\\tmv binary/live/vmlinuz-* binary/live/vmlinuz"
+          if marker not in s:
+              raise SystemExit("Expected ISOLINUX kernel move command not found")
+          diagnostic = """\\t\\t\\techo '=== DIAGNOSTIC: files before ISOLINUX kernel move ==='
+          \\t\\t\\tpwd
+          \\t\\t\\tfind chroot/boot -maxdepth 1 -type f -name 'vmlinuz*' -o -name 'initrd*' 2>/dev/null || true
+          \\t\\t\\tfind binary/live -maxdepth 2 -type f -print 2>/dev/null || true
+          \\t\\t\\tls -lah chroot/boot binary/live 2>&1 || true
+          """ + marker
+          s = s.replace(marker, diagnostic, 1)
+          p.write_text(s)
+          PY
+          sudo grep -n -A 8 'DIAGNOSTIC: files before ISOLINUX' /usr/lib/live/build/lb_binary_syslinux
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

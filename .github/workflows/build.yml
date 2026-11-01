@@ -106,7 +106,7 @@ jobs:
               raise SystemExit("Unexpected lb_binary_syslinux header")
           if len(lines) < 2 or lines[1].strip() != "set -x":
               lines.insert(1, "set -x")
-          p.write_text("\\n".join(lines) + "\\n")
+          p.write_text("\n".join(lines) + "\n")
           print("Enabled shell tracing in lb_binary_syslinux")
           PY
           echo "Patched Contents index path:"

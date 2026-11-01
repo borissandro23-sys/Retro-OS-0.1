@@ -43,19 +43,22 @@ jobs:
           from pathlib import Path
           p = Path("/usr/lib/live/build/lb_binary_syslinux")
           s = p.read_text()
-          marker = "\\t\\t\\t mv binary/live/vmlinuz-* binary/live/vmlinuz"
-          if marker not in s:
-              marker = "\\t\\t\\tmv binary/live/vmlinuz-* binary/live/vmlinuz"
-          if marker not in s:
-              raise SystemExit("Expected ISOLINUX kernel move command not found")
-          diagnostic = """\\t\\t\\techo '=== DIAGNOSTIC: files before ISOLINUX kernel move ==='
-          \\t\\t\\tpwd
-          \\t\\t\\tfind chroot/boot -maxdepth 1 -type f -name 'vmlinuz*' -o -name 'initrd*' 2>/dev/null || true
-          \\t\\t\\tfind binary/live -maxdepth 2 -type f -print 2>/dev/null || true
-          \\t\\t\\tls -lah chroot/boot binary/live 2>&1 || true
-          """ + marker
-          s = s.replace(marker, diagnostic, 1)
-          p.write_text(s)
+          lines = s.splitlines(keepends=True)
+          for index, line in enumerate(lines):
+              if "mv binary/live/vmlinuz-*" in line and "binary/live/vmlinuz" in line:
+                  indent = line[:len(line) - len(line.lstrip())]
+                  diagnostic = (
+                      indent + "echo '=== DIAGNOSTIC: files before ISOLINUX kernel move ==='\\n"
+                      + indent + "pwd\\n"
+                      + indent + "ls -lah chroot/boot binary/live 2>&1 || true\\n"
+                      + indent + "find chroot/boot -maxdepth 1 -type f \\( -name 'vmlinuz*' -o -name 'initrd*' \\) -print 2>/dev/null || true\\n"
+                      + indent + "find binary/live -maxdepth 2 -type f -print 2>/dev/null || true\\n"
+                  )
+                  lines.insert(index, diagnostic)
+                  break
+          else:
+              raise SystemExit("ISOLINUX vmlinuz move command not found in lb_binary_syslinux")
+          p.write_text("".join(lines))
           PY
           sudo grep -n -A 8 'DIAGNOSTIC: files before ISOLINUX' /usr/lib/live/build/lb_binary_syslinux
           echo "Patched Contents index path:"

@@ -98,6 +98,17 @@ jobs:
           print(f"Patched version selection: {patched}")
           PY
           sudo grep -n -A 4 'latest=$(find binary/live' /usr/lib/live/build/lb_binary_syslinux
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/usr/lib/live/build/lb_binary_syslinux")
+          lines = p.read_text().splitlines()
+          if not lines or not lines[0].startswith("#!"):
+              raise SystemExit("Unexpected lb_binary_syslinux header")
+          if len(lines) < 2 or lines[1].strip() != "set -x":
+              lines.insert(1, "set -x")
+          p.write_text("\\n".join(lines) + "\\n")
+          print("Enabled shell tracing in lb_binary_syslinux")
+          PY
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

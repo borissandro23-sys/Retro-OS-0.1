@@ -189,11 +189,35 @@ jobs:
           autologin-user=retro
           autologin-user-timeout=0
           user-session=openbox
+          autologin-session=openbox
+          greeter-session=lightdm-gtk-greeter
           LIGHTDM_CONFIG
           ln -sf /lib/systemd/system/graphical.target config/includes.chroot/etc/systemd/system/default.target
           ln -sf /lib/systemd/system/lightdm.service config/includes.chroot/etc/systemd/system/display-manager.service
           mkdir -p config/includes.chroot/etc/systemd/system/graphical.target.wants
           ln -sf /lib/systemd/system/lightdm.service config/includes.chroot/etc/systemd/system/graphical.target.wants/lightdm.service
+
+          mkdir -p config/includes.chroot/usr/local/sbin
+          cat > config/includes.chroot/usr/local/sbin/retro-boot-diagnostics <<'RETRO_DIAG_SCRIPT'
+          #!/bin/sh
+          {
+            echo "=== default target ==="
+            systemctl get-default
+            echo "=== LightDM enabled/active/status ==="
+            systemctl is-enabled lightdm.service || true
+            systemctl is-active lightdm.service || true
+            systemctl status lightdm.service --no-pager || true
+            echo "=== effective LightDM configuration ==="
+            lightdm --show-config || true
+            echo "=== greeters and sessions ==="
+            ls -la /usr/share/xgreeters /usr/share/xsessions || true
+            echo "=== LightDM journal ==="
+            journalctl -b -u lightdm.service --no-pager || true
+            echo "=== boot errors ==="
+            journalctl -b -p err --no-pager || true
+          } > /var/log/retro-lightdm-status.txt 2>&1
+          RETRO_DIAG_SCRIPT
+          chmod 0755 config/includes.chroot/usr/local/sbin/retro-boot-diagnostics
 
           cat > config/includes.chroot/etc/systemd/system/retro-diagnostics.service <<'RETRO_DIAGNOSTICS'
           [Unit]
@@ -203,16 +227,15 @@ jobs:
 
           [Service]
           Type=oneshot
-          ExecStart=/bin/sh -c 'systemctl get-default; systemctl status lightdm --no-pager; systemctl --failed --no-pager; journalctl -b -u lightdm --no-pager'
-          StandardOutput=append:/var/log/retro-lightdm-status.txt
-          StandardError=append:/var/log/retro-lightdm-status.txt
+          ExecStart=/usr/local/sbin/retro-boot-diagnostics
           RemainAfterExit=yes
 
           [Install]
-          WantedBy=graphical.target
+          WantedBy=multi-user.target
           RETRO_DIAGNOSTICS
-          ln -sf /etc/systemd/system/retro-diagnostics.service config/includes.chroot/etc/systemd/system/graphical.target.wants/retro-diagnostics.service
-          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' 'lightdm' 'openbox' 'xserver-xorg' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
+          mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
+          ln -sf /etc/systemd/system/retro-diagnostics.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/retro-diagnostics.service
+          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' 'lightdm' 'lightdm-gtk-greeter' 'openbox' 'xserver-xorg' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components quiet splash username=retro init=/lib/systemd/systemd"
 

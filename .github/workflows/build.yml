@@ -162,6 +162,24 @@ jobs:
           mkdir -p config/includes.binary/live
           touch config/includes.binary/live/.keep
           mkdir -p config/package-lists
+          mkdir -p config/hooks/live
+          cat > config/hooks/live/0100-create-retro-user.hook.chroot <<'RETRO_USER_HOOK'
+          #!/bin/sh
+          set -eu
+          if ! id retro >/dev/null 2>&1; then
+            useradd --create-home --shell /bin/bash retro
+          fi
+          usermod --append --groups audio,video,plugdev,input,netdev retro
+          passwd --delete retro
+          install -d -m 0755 /etc/lightdm/lightdm.conf.d
+          cat > /etc/lightdm/lightdm.conf.d/12-retro-autologin.conf <<'LIGHTDM_CONFIG'
+          [Seat:*]
+          autologin-user=retro
+          autologin-user-timeout=0
+          user-session=openbox
+          LIGHTDM_CONFIG
+          RETRO_USER_HOOK
+          chmod 0755 config/hooks/live/0100-create-retro-user.hook.chroot
           printf '%s\\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' > config/package-lists/retro-os-bootloader.list.chroot
           printf '%s\\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components quiet splash"

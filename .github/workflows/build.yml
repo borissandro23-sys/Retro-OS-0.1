@@ -268,38 +268,3 @@ jobs:
           name: retro-os-live-amd64
           path: retro-os-live-amd64.iso
           if-no-files-found: error
- chroot/etc/lightdm/lightdm.conf.d/12-retro-autologin.conf
-          echo "Retro user and LightDM autologin are configured"
-
-      - name: Locate and stage ISO image
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Searching for generated ISO files..."
-          if [ -f "./binary.hybrid.iso" ]; then
-            ISO_FILE="./binary.hybrid.iso"
-          else
-            ISO_FILE="$(find . -maxdepth 5 -type f -iname '*.iso' -not -path './.git/*' -print -quit 2>/dev/null || true)"
-          fi
-          if [ -z "$ISO_FILE" ] || [ ! -f "$ISO_FILE" ]; then
-            echo "::error::No ISO file was generated"
-            ls -lah
-            exit 1
-          fi
-          cp "$ISO_FILE" retro-os-live-amd64.iso
-          ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
-          printf '%s\\n' "$ISO_LIST"
-          for REQUIRED in isolinux.bin vmlinuz initrd.img; do
-            if ! printf '%s\\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
-              echo "::error::$REQUIRED is missing from the generated ISO"
-              exit 1
-            fi
-          done
-          ls -lh retro-os-live-amd64.iso
-
-      - name: Publish ISO artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: retro-os-live-amd64
-          path: retro-os-live-amd64.iso
-          if-no-files-found: error

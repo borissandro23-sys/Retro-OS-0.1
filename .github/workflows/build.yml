@@ -129,7 +129,16 @@ jobs:
           set -eu
           mkdir -p config/includes.chroot/etc/apt/sources.list.d
           mkdir -p config/includes.chroot/usr/bin
-          ln -sf rsvg-convert config/includes.chroot/usr/bin/rsvg
+          cat > config/includes.chroot/usr/bin/rsvg <<'RSVG_WRAPPER'
+          #!/bin/sh
+          set -eu
+          if [ "$#" -ne 8 ]; then
+            echo "Unsupported legacy rsvg invocation: expected --format FORMAT --height HEIGHT --width WIDTH INPUT OUTPUT" >&2
+            exit 2
+          fi
+          exec /usr/bin/rsvg-convert --format="$2" --height="$4" --width="$6" --output="$8" "$7"
+          RSVG_WRAPPER
+          chmod 0755 config/includes.chroot/usr/bin/rsvg
           mkdir -p config/includes.binary/live
           touch config/includes.binary/live/.keep
           mkdir -p config/package-lists

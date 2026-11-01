@@ -30,13 +30,13 @@ jobs:
           from pathlib import Path
           p = Path("/usr/lib/live/build/lb_binary_iso")
           s = p.read_text()
-          old = "genisoimage syslinux"
-          new = "genisoimage syslinux syslinux-utils"
+          old = "Check_package chroot/usr/bin/isohybrid syslinux"
+          new = "Check_package chroot/usr/bin/isohybrid syslinux-utils"
           if old not in s:
-              raise SystemExit("Expected ISO-stage package install list not found in lb_binary_iso")
+              raise SystemExit("Expected isohybrid dependency check not found in lb_binary_iso")
           s = s.replace(old, new, 1)
           p.write_text(s)
-          print("Patched ISO stage to install syslinux-utils alongside syslinux")
+          print("Patched ISO stage to install syslinux-utils, which provides isohybrid")
           PY
 
           command -v isohybrid

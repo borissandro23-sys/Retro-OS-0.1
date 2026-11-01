@@ -164,6 +164,26 @@ jobs:
           mkdir -p config/package-lists
           mkdir -p config/includes.chroot/etc/lightdm/lightdm.conf.d
           mkdir -p config/includes.chroot/etc/systemd/system
+          mkdir -p config/hooks/live
+          cat > config/hooks/live/0100-create-retro-user.hook.chroot <<'RETRO_USER_HOOK'
+          #!/bin/sh
+          set -eu
+
+          if ! id retro >/dev/null 2>&1; then
+              useradd --create-home --shell /bin/bash retro
+          fi
+
+          for group in audio video plugdev; do
+              if getent group "$group" >/dev/null 2>&1; then
+                  usermod -aG "$group" retro
+              fi
+          done
+
+          # LightDM autologin does not need a blank password.
+          passwd -l retro
+          id retro
+          RETRO_USER_HOOK
+          chmod 0755 config/hooks/live/0100-create-retro-user.hook.chroot
           cat > config/includes.chroot/etc/lightdm/lightdm.conf.d/12-retro-autologin.conf <<'LIGHTDM_CONFIG'
           [Seat:*]
           autologin-user=retro

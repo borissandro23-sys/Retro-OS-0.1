@@ -75,29 +75,29 @@ jobs:
               if stripped == "mv binary/live/vmlinuz-* binary/live/vmlinuz":
                   indent = line[:len(line) - len(line.lstrip())]
                   out.extend([
-                      indent + "latest=\$(find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' -printf '%f\\n' | sort -V | tail -n 1)",
-                      indent + "test -n \"\$latest\"",
-                      indent + "find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' ! -name \"\$latest\" -delete",
-                      indent + "mv \"binary/live/\$latest\" binary/live/vmlinuz",
+                      indent + "latest=$(find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' -printf '%f\\n' | sort -V | tail -n 1)",
+                      indent + "test -n \"$latest\"",
+                      indent + "find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' ! -name \"$latest\" -delete",
+                      indent + "mv \"binary/live/$latest\" binary/live/vmlinuz",
                   ])
                   patched["vmlinuz"] += 1
               elif stripped == "mv binary/live/initrd.img-* binary/live/initrd.img":
                   indent = line[:len(line) - len(line.lstrip())]
                   out.extend([
-                      indent + "latest=\$(find binary/live -maxdepth 1 -type f -name 'initrd.img-*' -printf '%f\\n' | sort -V | tail -n 1)",
-                      indent + "test -n \"\$latest\"",
-                      indent + "find binary/live -maxdepth 1 -type f -name 'initrd.img-*' ! -name \"\$latest\" -delete",
-                      indent + "mv \"binary/live/\$latest\" binary/live/initrd.img",
+                      indent + "latest=$(find binary/live -maxdepth 1 -type f -name 'initrd.img-*' -printf '%f\\n' | sort -V | tail -n 1)",
+                      indent + "test -n \"$latest\"",
+                      indent + "find binary/live -maxdepth 1 -type f -name 'initrd.img-*' ! -name \"$latest\" -delete",
+                      indent + "mv \"binary/live/$latest\" binary/live/initrd.img",
                   ])
                   patched["initrd.img"] += 1
               else:
                   out.append(line)
           if patched != {"vmlinuz": 1, "initrd.img": 1}:
               raise SystemExit(f"Expected one kernel and one initrd move; found {patched}")
-          p.write_text("\\n".join(out) + "\\n")
+          p.write_text("\n".join(out) + "\n")
           print(f"Patched version selection: {patched}")
           PY
-          sudo grep -n -A 4 'latest=\$(find binary/live' /usr/lib/live/build/lb_binary_syslinux
+          sudo grep -n -A 4 'latest=$(find binary/live' /usr/lib/live/build/lb_binary_syslinux
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

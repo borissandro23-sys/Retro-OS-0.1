@@ -23,7 +23,22 @@ jobs:
           sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux-common syslinux-utils isolinux cpio grub-efi-amd64-bin
           echo "Checking live-build kernel helper..."
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
-          sudo sed -i 's|/dists/\\([^/]*/\\)Contents-|/dists/\\1main/Contents-|g' /usr/lib/live/build/lb_chroot_linux-image
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/usr/lib/live/build/lb_chroot_linux-image")
+          s = p.read_text()
+          old = '/dists/${LB_PARENT_DISTRIBUTION}/Contents-'
+          new = '/dists/${LB_PARENT_DISTRIBUTION}/main/Contents-'
+          old2 = '/dists/${LB_DISTRIBUTION}/Contents-'
+          new2 = '/dists/${LB_DISTRIBUTION}/main/Contents-'
+          if old not in s and old2 not in s:
+              raise SystemExit("Expected Contents URL patterns were not found; refusing to continue")
+          s = s.replace(old, new).replace(old2, new2)
+          p.write_text(s)
+          PY
+          echo "Patched Contents index path:"
+          sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
+          sudo grep -q '/main/Contents-' /usr/lib/live/build/lb_chroot_linux-image
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

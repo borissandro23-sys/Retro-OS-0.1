@@ -223,7 +223,7 @@ jobs:
           echo "=== run live-build ==="
           sudo lb build
           echo "=== verify Retro OS account and automatic graphical login ==="
-          echo "The live-build chroot is cleaned automatically after a successful build. Account and LightDM configuration are created by the chroot hook; ISO staging validates the generated image."
+          echo "The live-build chroot is cleaned automatically after a successful build. live-config and live-config-systemd create the live user from the username=retro boot parameter; LightDM is configured for automatic Openbox login."
 
       - name: Locate and stage ISO image
         shell: bash

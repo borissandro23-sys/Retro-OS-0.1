@@ -42,25 +42,28 @@ jobs:
           sudo python3 - <<'PY'
           from pathlib import Path
           p = Path("/usr/lib/live/build/lb_binary_syslinux")
-          s = p.read_text()
-          lines = s.splitlines(keepends=True)
-          for index, line in enumerate(lines):
-              if "mv binary/live/vmlinuz-*" in line and "binary/live/vmlinuz" in line:
+          lines = p.read_text().splitlines()
+          out = []
+          count = 0
+          for line in lines:
+              if "mv binary/live/" in line:
                   indent = line[:len(line) - len(line.lstrip())]
-                  diagnostic = (
-                      indent + "echo '=== DIAGNOSTIC: files before ISOLINUX kernel move ==='\\n"
-                      + indent + "pwd\\n"
-                      + indent + "ls -lah chroot/boot binary/live 2>&1 || true\\n"
-                      + indent + "find chroot/boot -maxdepth 1 -type f \\( -name 'vmlinuz*' -o -name 'initrd*' \\) -print 2>/dev/null || true\\n"
-                      + indent + "find binary/live -maxdepth 2 -type f -print 2>/dev/null || true\\n"
-                  )
-                  lines.insert(index, diagnostic)
-                  break
-          else:
-              raise SystemExit("ISOLINUX vmlinuz move command not found in lb_binary_syslinux")
-          p.write_text("".join(lines))
+                  diagnostic = [
+                      "echo '=== DIAGNOSTIC: before live kernel/initrd move ==='",
+                      "pwd",
+                      "ls -lah chroot/boot binary binary/live 2>&1 || true",
+                      "find chroot/boot -maxdepth 1 -type f \\( -name 'vmlinuz*' -o -name 'initrd*' \\) -print 2>/dev/null || true",
+                      "find binary -maxdepth 3 -type f -print 2>/dev/null || true",
+                  ]
+                  out.extend(indent + item for item in diagnostic)
+                  count += 1
+              out.append(line)
+          if count == 0:
+              raise SystemExit("No binary/live move commands found in lb_binary_syslinux")
+          p.write_text("\n".join(out) + "\n")
+          print(f"Inserted diagnostics before {count} move command(s)")
           PY
-          sudo grep -n -A 8 'DIAGNOSTIC: files before ISOLINUX' /usr/lib/live/build/lb_binary_syslinux
+          sudo grep -n -B 5 'mv binary/live/' /usr/lib/live/build/lb_binary_syslinux
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

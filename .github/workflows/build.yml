@@ -233,7 +233,9 @@ jobs:
           echo "=== verify Retro OS account and automatic graphical login ==="
           sudo grep -q '^retro:' chroot/etc/passwd
           sudo test -s chroot/etc/lightdm/lightdm.conf.d/12-retro-autologin.conf
-          sudo grep -q '^autologin-user=retro
+          sudo grep -q '^autologin-user=retro$' chroot/etc/lightdm/lightdm.conf.d/12-retro-autologin.conf
+          echo "Retro user and LightDM autologin are configured"
+
       - name: Locate and stage ISO image
         shell: bash
         run: |

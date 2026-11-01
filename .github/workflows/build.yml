@@ -24,6 +24,23 @@ jobs:
           echo "Checking isohybrid availability..."
           command -v isohybrid
           isohybrid --help >/dev/null 2>&1 || true
+          echo "Checking live-build ISO helper..."
+          sudo grep -n -C 4 'genisoimage\|syslinux' /usr/lib/live/build/lb_binary_iso
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/usr/lib/live/build/lb_binary_iso")
+          s = p.read_text()
+          old = "genisoimage syslinux"
+          new = "genisoimage syslinux syslinux-utils"
+          if old not in s:
+              raise SystemExit("Expected ISO-stage package install list not found in lb_binary_iso")
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          print("Patched ISO stage to install syslinux-utils alongside syslinux")
+          PY
+
+          command -v isohybrid
+          isohybrid --help >/dev/null 2>&1 || true
           echo "Checking live-build kernel helper..."
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
           sudo python3 - <<'PY'

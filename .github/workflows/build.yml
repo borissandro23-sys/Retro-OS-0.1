@@ -109,6 +109,18 @@ jobs:
           p.write_text("\n".join(lines) + "\n")
           print("Enabled shell tracing in lb_binary_syslinux")
           PY
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/usr/lib/live/build/lb_binary_syslinux")
+          s = p.read_text()
+          old = "awk '/Installed: / { print $2 }'"
+          new = old + " | tr '\\n' ' '"
+          if old not in s:
+              raise SystemExit("Expected kernel version awk expression not found")
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          print("Flattened kernel version list for the SVG sed substitution")
+          PY
           echo "Patched Contents index path:"
           sudo grep -n 'Contents-' /usr/lib/live/build/lb_chroot_linux-image
 

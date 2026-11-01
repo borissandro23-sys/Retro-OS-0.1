@@ -76,7 +76,10 @@ jobs:
           echo "=== relevant live-build kernel move commands ==="
           sudo grep -R -n -C 5 'binary/live/vmlinuz' /usr/lib/live/build 2>/dev/null || true
           echo "=== kernel files before build ==="
-          sudo find chroot/boot -maxdepth 1 \\( -type f -o -type l \\) -print 2>/dev/null || true
+          sudo find chroot/boot -maxdepth 1 -name 'vmlinuz*' -print 2>/dev/null || true
+          sudo find chroot/boot -maxdepth 1 -name 'initrd*' -print 2>/dev/null || true
+          echo "=== binary/live files before build ==="
+          sudo find binary/live -maxdepth 2 -type f -print 2>/dev/null || true
           echo "=== binary directories before build ==="
           sudo find binary -maxdepth 3 -type d -print 2>/dev/null || true
           echo "=== run live-build ==="

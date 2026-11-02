@@ -217,9 +217,25 @@ jobs:
           RETRO_DIAGNOSTICS
           mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
           ln -sf /etc/systemd/system/retro-diagnostics.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/retro-diagnostics.service
-          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' 'lightdm' 'lightdm-gtk-greeter' 'openbox' 'xserver-xorg' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
-          printf '%s\\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
-          lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components username=retro init=/lib/systemd/systemd"
+          cat > config/includes.chroot/etc/systemd/system/retro-password.service <<'RETRO_PASSWORD'
+          [Unit]
+          Description=Set password for the Retro OS live user
+          Wants=live-config.service
+          After=live-config.service
+          Before=lightdm.service getty@tty1.service
+
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/sh -c 'id retro >/dev/null 2>&1 && printf "retro:live\\n" | chpasswd'
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+          RETRO_PASSWORD
+          ln -sf /etc/systemd/system/retro-password.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/retro-password.service
+          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'retroarch' 'lightdm' 'lightdm-gtk-greeter' 'openbox' 'xserver-xorg' 'xserver-xorg-video-all' 'xserver-xorg-input-all' 'xinit' 'x11-xserver-utils' 'libgl1-mesa-dri' 'sudo' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
+          printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
+          lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --apt-recommends true --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components username=retro init=/lib/systemd/systemd"
 
       - name: Prepare complete ISOLINUX bootloader theme
         run: |
@@ -287,9 +303,9 @@ jobs:
           fi
           cp "$ISO_FILE" retro-os-live-amd64.iso
           ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
-          printf '%s\\n' "$ISO_LIST"
+          printf '%s\n' "$ISO_LIST"
           for REQUIRED in isolinux.bin vmlinuz initrd.img; do
-            if ! printf '%s\\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
+            if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1
             fi

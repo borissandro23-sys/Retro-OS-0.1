@@ -156,7 +156,7 @@ class RetroOS(Gtk.Application):
         top.get_style_context().add_class("topbar")
         top.set_border_width(16)
         brand = Gtk.Label()
-        brand.set_markup('<span class="brand">RETRO <span foreground="#50e3c2">OS</span></span>')
+        brand.set_markup('<span foreground="#f4f7ff" weight="heavy" size="x-large">RETRO </span><span foreground="#50e3c2" weight="heavy" size="x-large">OS</span>')
         brand.set_xalign(0)
         top.pack_start(brand, False, False, 8)
         top.pack_start(Gtk.Label(label="THE LIVING ROOM, REIMAGINED", xalign=0), True, True, 8)

@@ -7,6 +7,12 @@ xserver-xorg-input-all
 openbox
 lightdm
 dbus-x11
+# Retro OS console interface
+python3
+python3-gi
+gir1.2-gtk-3.0
+x11-xserver-utils
+pulseaudio-utils
 # Gaming frontend and input
 retroarch
 retroarch-assets

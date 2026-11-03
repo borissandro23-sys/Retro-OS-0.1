@@ -1,0 +1,4 @@
+#!/bin/sh
+# Start the Retro OS console launcher after Openbox has initialized.
+sleep 2
+exec /usr/bin/python3 /usr/local/bin/retro-os-ui

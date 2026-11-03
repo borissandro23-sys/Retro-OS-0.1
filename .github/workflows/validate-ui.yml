@@ -1,0 +1,27 @@
+name: Validate Retro OS console GUI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-launcher:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate Python syntax
+        run: python3 -m py_compile config/includes.chroot/usr/local/bin/retro-os-ui
+
+      - name: Verify GUI boot integration
+        run: |
+          grep -q 'python3-gi' config/package-lists/retro-os.list.chroot
+          grep -q 'gir1.2-gtk-3.0' config/package-lists/retro-os.list.chroot
+          grep -q '/usr/local/bin/retro-os-ui' config/includes.chroot/etc/xdg/openbox/autostart

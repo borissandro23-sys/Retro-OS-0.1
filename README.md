@@ -6,6 +6,20 @@ The project uses the Linux kernel for hardware support and Libretro/RetroArch fo
 
 > Early development project. The current repository still contains a tiny freestanding-kernel experiment from the first prototype; it is not the bootable gaming system yet.
 
+## Console GUI
+
+The live image now includes a first GTK 3 console-style launcher. Openbox starts it automatically after the live user logs in. The interface provides:
+
+- A console-inspired home screen and quick navigation
+- A game library scanner for common ROM and disc-image formats
+- RetroArch launching with a matching installed Libretro core when available
+- Settings for the library folder, detected display modes and master volume
+- Confirmed restart and shutdown actions
+
+The launcher scans the configured folder (default: `~/Games`). Place game files there, or choose another folder in Settings. Retro OS does not include commercial game ROMs or proprietary BIOS files. A compatible Libretro core must be installed before a game can run; the existing `retro-core-manager` prototype remains a separate command-line utility for now.
+
+This is an initial GUI milestone: hardware-specific display/audio controls depend on what Xorg, PulseAudio and the virtual or physical machine expose. The ISO still needs a fresh GitHub Actions build and VirtualBox/PC testing after these changes.
+
 ## Direction
 
 - **Base system:** Debian GNU/Linux (x86_64)

@@ -1,0 +1,578 @@
+#!/usr/bin/env python3
+"""Retro OS console-style launcher for the Debian Live image."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import threading
+from pathlib import Path
+
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk, Gdk, GLib, Pango
+
+APP_DIR = Path.home() / ".config" / "retro-os"
+SETTINGS_FILE = APP_DIR / "settings.json"
+DEFAULT_LIBRARY = Path.home() / "Games"
+ROM_EXTENSIONS = {
+    ".nes", ".fds", ".unf", ".unif", ".sfc", ".smc", ".gba", ".gb",
+    ".gbc", ".n64", ".z64", ".v64", ".nds", ".3ds", ".cia", ".iso",
+    ".cue", ".chd", ".pbp", ".cso", ".md", ".gen", ".32x", ".zip",
+    ".7z", ".a26", ".a52", ".a78", ".j64", ".lnx", ".pce", ".sg",
+    ".gg", ".sms", ".ws", ".wsc"
+}
+CORE_HINTS = {
+    ".nes": ("fceumm", "nestopia"), ".fds": ("fceumm", "nestopia"),
+    ".sfc": ("snes9x", "bsnes"), ".smc": ("snes9x", "bsnes"),
+    ".gba": ("mgba", "gpsp"), ".gb": ("gambatte", "gearboy"),
+    ".gbc": ("gambatte", "gearboy"), ".nds": ("melonds", "desmume"),
+    ".n64": ("mupen64plus_next",), ".z64": ("mupen64plus_next",),
+    ".v64": ("mupen64plus_next",), ".md": ("genesis_plus_gx", "picodrive"),
+    ".gen": ("genesis_plus_gx", "picodrive"), ".32x": ("picodrive",),
+    ".iso": ("pcsx_rearmed",), ".cue": ("pcsx_rearmed",),
+    ".chd": ("pcsx_rearmed",), ".pbp": ("pcsx_rearmed",),
+    ".cso": ("ppsspp",), ".3ds": ("citra",), ".cia": ("citra",),
+    ".zip": ("fbneo", "mame"), ".7z": ("fbneo", "mame"),
+}
+
+CSS = """
+* { font-family: 'DejaVu Sans', sans-serif; }
+window { background: #090e18; color: #edf3ff; }
+.topbar { background: #101a2a; border-bottom: 1px solid #24344d; }
+.brand { color: #f4f7ff; font-size: 19px; font-weight: 900; letter-spacing: 2px; }
+.brand-accent { color: #50e3c2; }
+.muted { color: #91a2bc; }
+.page-title { color: #f4f7ff; font-size: 27px; font-weight: 800; }
+.section-title { color: #f4f7ff; font-size: 16px; font-weight: 700; }
+.sidebar { background: #0d1523; border-right: 1px solid #24344d; }
+.nav-button { color: #aab8ce; background: transparent; border: 0; border-radius: 10px; padding: 13px 15px; text-align: left; }
+.nav-button:hover { background: #1a2940; color: #ffffff; }
+.nav-button:checked { background: #183b43; color: #65f0d0; }
+.primary { background: #38cdb0; color: #07131a; border-radius: 10px; padding: 12px 20px; font-weight: 800; border: 0; }
+.primary:hover { background: #62e6cb; color: #07131a; }
+.secondary { background: #1a2940; color: #e7efff; border: 1px solid #30435f; border-radius: 10px; padding: 10px 16px; }
+.secondary:hover { background: #263b59; }
+.tile { background: #121e30; border: 1px solid #263a56; border-radius: 16px; padding: 18px; }
+.hero { background: #13283a; border: 1px solid #285269; border-radius: 20px; padding: 28px; }
+.hero-title { color: #ffffff; font-size: 34px; font-weight: 900; }
+.game-row { background: #111d2e; border: 1px solid #263a56; border-radius: 12px; padding: 12px; }
+entry, spinbutton, combobox, textview { background: #111d2e; color: #edf3ff; border: 1px solid #344964; border-radius: 8px; padding: 8px; }
+scale trough { background: #263a56; border-radius: 6px; min-height: 7px; }
+scale highlight { background: #38cdb0; border-radius: 6px; }
+scale slider { background: #e7fff8; border: 2px solid #38cdb0; min-width: 16px; min-height: 16px; }
+scrollbar trough { background: #0d1523; }
+scrollbar slider { background: #344964; border-radius: 8px; }
+"""
+
+def load_settings():
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return {"library": str(DEFAULT_LIBRARY), **data}
+    except (OSError, ValueError, TypeError):
+        return {"library": str(DEFAULT_LIBRARY)}
+
+def save_settings(settings):
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+def dialog(parent, title, message, kind=Gtk.MessageType.INFO):
+    box = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=kind,
+                            buttons=Gtk.ButtonsType.OK, text=title)
+    box.format_secondary_text(message)
+    box.run()
+    box.destroy()
+
+def installed_cores():
+    roots = [Path("/usr/lib/x86_64-linux-gnu/libretro"),
+             Path("/usr/lib/retroarch/cores"),
+             Path.home() / ".config/retroarch/cores"]
+    found = {}
+    for root in roots:
+        if root.is_dir():
+            for core in root.glob("*_libretro.so"):
+                found.setdefault(core.name.replace("_libretro.so", ""), core)
+    return found
+
+def scan_games(folder):
+    root = Path(folder).expanduser()
+    if not root.is_dir():
+        return []
+    games = []
+    try:
+        for current, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for name in files:
+                path = Path(current) / name
+                if path.suffix.lower() in ROM_EXTENSIONS:
+                    games.append(path)
+            if len(games) >= 1200:
+                break
+    except OSError:
+        pass
+    return sorted(games, key=lambda p: p.name.casefold())
+
+class RetroOS(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.retroos.Console",
+                         flags=0)
+        self.settings = load_settings()
+        self.games = []
+        self.cores = installed_cores()
+        self.nav_buttons = {}
+        self.stack = None
+        self.window = None
+
+    def do_activate(self):
+        if self.window:
+            self.window.present()
+            return
+        self.build_window()
+        self.window.show_all()
+        self.window.fullscreen()
+        self.show_page("home")
+        self.refresh_games()
+
+    def build_window(self):
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Retro OS")
+        self.window.set_default_size(1280, 800)
+        self.window.set_name("retro-window")
+        self.window.connect("key-press-event", self.on_key)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS.encode("utf-8"))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.window.add(root)
+
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        top.get_style_context().add_class("topbar")
+        top.set_border_width(16)
+        brand = Gtk.Label()
+        brand.set_markup('<span class="brand">RETRO <span foreground="#50e3c2">OS</span></span>')
+        brand.set_xalign(0)
+        top.pack_start(brand, False, False, 8)
+        top.pack_start(Gtk.Label(label="THE LIVING ROOM, REIMAGINED", xalign=0), True, True, 8)
+        clock = Gtk.Label(label="READY TO PLAY")
+        clock.get_style_context().add_class("muted")
+        top.pack_end(clock, False, False, 8)
+        root.pack_start(top, False, False, 0)
+
+        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        root.pack_start(body, True, True, 0)
+
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        sidebar.set_size_request(218, -1)
+        sidebar.set_border_width(16)
+        sidebar.get_style_context().add_class("sidebar")
+        body.pack_start(sidebar, False, False, 0)
+
+        nav_items = [("home", "⌂   Home"), ("library", "▦   Game library"),
+                     ("settings", "⚙   Settings"), ("power", "⏻   Power")]
+        for key, label in nav_items:
+            button = Gtk.ToggleButton(label=label)
+            button.set_relief(Gtk.ReliefStyle.NONE)
+            button.set_halign(Gtk.Align.FILL)
+            button.get_style_context().add_class("nav-button")
+            button.connect("toggled", self.on_nav, key)
+            sidebar.pack_start(button, False, False, 0)
+            self.nav_buttons[key] = button
+
+        spacer = Gtk.Box()
+        sidebar.pack_start(spacer, True, True, 0)
+        footer = Gtk.Label(label="RETRO OS  •  0.1")
+        footer.get_style_context().add_class("muted")
+        footer.set_xalign(0)
+        sidebar.pack_start(footer, False, False, 6)
+
+        self.stack = Gtk.Stack()
+        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.stack.set_transition_duration(150)
+        body.pack_start(self.stack, True, True, 0)
+
+        self.stack.add_named(self.home_page(), "home")
+        self.stack.add_named(self.library_page(), "library")
+        self.stack.add_named(self.settings_page(), "settings")
+        self.stack.add_named(self.power_page(), "power")
+
+    def page_shell(self, title, subtitle):
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        outer.set_border_width(30)
+        heading = Gtk.Label(label=title, xalign=0)
+        heading.get_style_context().add_class("page-title")
+        outer.pack_start(heading, False, False, 0)
+        desc = Gtk.Label(label=subtitle, xalign=0)
+        desc.get_style_context().add_class("muted")
+        outer.pack_start(desc, False, False, 0)
+        return outer
+
+    def home_page(self):
+        page = self.page_shell("Welcome back", "Your games. Your systems. Your space.")
+        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        hero.get_style_context().add_class("hero")
+        title = Gtk.Label(label="PRESS START", xalign=0)
+        title.get_style_context().add_class("hero-title")
+        hero.pack_start(title, False, False, 0)
+        tagline = Gtk.Label(label="A console experience built around the games you love.", xalign=0)
+        tagline.get_style_context().add_class("muted")
+        hero.pack_start(tagline, False, False, 0)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        play = Gtk.Button(label="Open game library")
+        play.get_style_context().add_class("primary")
+        play.connect("clicked", lambda *_: self.show_page("library"))
+        row.pack_start(play, False, False, 0)
+        scan = Gtk.Button(label="Scan for games")
+        scan.get_style_context().add_class("secondary")
+        scan.connect("clicked", lambda *_: self.refresh_games())
+        row.pack_start(scan, False, False, 0)
+        hero.pack_start(row, False, False, 4)
+        page.pack_start(hero, False, False, 0)
+
+        cards = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        page.pack_start(cards, False, False, 0)
+        self.home_game_count = self.stat_card(cards, "GAMES FOUND", "0")
+        self.home_core_count = self.stat_card(cards, "CORES READY", str(len(self.cores)))
+        self.home_system_count = self.stat_card(cards, "SUPPORTED FORMATS", str(len(ROM_EXTENSIONS)))
+
+        section = Gtk.Label(label="QUICK ACCESS", xalign=0)
+        section.get_style_context().add_class("section-title")
+        page.pack_start(section, False, False, 6)
+        quick = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        page.pack_start(quick, False, False, 0)
+        self.quick_tile(quick, "▦", "Game library", "Browse and launch your games", "library")
+        self.quick_tile(quick, "⚙", "System settings", "Display, sound and library folder", "settings")
+        self.quick_tile(quick, "⏻", "Power options", "Restart or shut down Retro OS", "power")
+        return page
+
+    def stat_card(self, parent, title, value):
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        card.get_style_context().add_class("tile")
+        label = Gtk.Label(label=title, xalign=0)
+        label.get_style_context().add_class("muted")
+        number = Gtk.Label(label=value, xalign=0)
+        number.get_style_context().add_class("page-title")
+        card.pack_start(label, False, False, 0)
+        card.pack_start(number, False, False, 0)
+        parent.pack_start(card, True, True, 0)
+        return number
+
+    def quick_tile(self, parent, icon, title, description, target):
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.get_style_context().add_class("tile")
+        icon_label = Gtk.Label(label=icon, xalign=0)
+        icon_label.set_markup('<span foreground="#50e3c2" size="xx-large">' + GLib.markup_escape_text(icon) + '</span>')
+        card.pack_start(icon_label, False, False, 0)
+        name = Gtk.Label(label=title, xalign=0)
+        name.get_style_context().add_class("section-title")
+        card.pack_start(name, False, False, 0)
+        text = Gtk.Label(label=description, xalign=0)
+        text.get_style_context().add_class("muted")
+        text.set_line_wrap(True)
+        card.pack_start(text, False, False, 0)
+        button = Gtk.Button(label="Open")
+        button.get_style_context().add_class("secondary")
+        button.connect("clicked", lambda *_: self.show_page(target))
+        card.pack_start(button, False, False, 4)
+        parent.pack_start(card, True, True, 0)
+
+    def library_page(self):
+        page = self.page_shell("Game library", "Your collection, ready when you are.")
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.game_search = Gtk.SearchEntry()
+        self.game_search.set_placeholder_text("Search your games...")
+        self.game_search.connect("search-changed", lambda *_: self.render_games())
+        toolbar.pack_start(self.game_search, True, True, 0)
+        refresh = Gtk.Button(label="↻  Scan")
+        refresh.get_style_context().add_class("secondary")
+        refresh.connect("clicked", lambda *_: self.refresh_games())
+        toolbar.pack_start(refresh, False, False, 0)
+        page.pack_start(toolbar, False, False, 0)
+        self.game_summary = Gtk.Label(label="Scanning your library…", xalign=0)
+        self.game_summary.get_style_context().add_class("muted")
+        page.pack_start(self.game_summary, False, False, 0)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.game_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.game_list.set_border_width(2)
+        scroll.add(self.game_list)
+        page.pack_start(scroll, True, True, 0)
+        return page
+
+    def settings_page(self):
+        page = self.page_shell("System settings", "Tune your Retro OS setup.")
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        panel.get_style_context().add_class("tile")
+        page.pack_start(panel, False, False, 0)
+
+        folder_label = Gtk.Label(label="GAME LIBRARY FOLDER", xalign=0)
+        folder_label.get_style_context().add_class("section-title")
+        panel.pack_start(folder_label, False, False, 0)
+        folder_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.folder_entry = Gtk.Entry()
+        self.folder_entry.set_text(self.settings.get("library", str(DEFAULT_LIBRARY)))
+        folder_row.pack_start(self.folder_entry, True, True, 0)
+        browse = Gtk.Button(label="Browse…")
+        browse.get_style_context().add_class("secondary")
+        browse.connect("clicked", self.choose_folder)
+        folder_row.pack_start(browse, False, False, 0)
+        panel.pack_start(folder_row, False, False, 0)
+
+        display_label = Gtk.Label(label="DISPLAY RESOLUTION", xalign=0)
+        display_label.get_style_context().add_class("section-title")
+        panel.pack_start(display_label, False, False, 0)
+        self.resolution_combo = Gtk.ComboBoxText()
+        self.resolutions = self.get_resolutions()
+        for mode in self.resolutions:
+            self.resolution_combo.append_text(mode)
+        if self.resolutions:
+            self.resolution_combo.set_active(0)
+        panel.pack_start(self.resolution_combo, False, False, 0)
+
+        sound_label = Gtk.Label(label="MASTER VOLUME", xalign=0)
+        sound_label.get_style_context().add_class("section-title")
+        panel.pack_start(sound_label, False, False, 0)
+        self.volume_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.volume_scale.set_value(self.get_volume())
+        self.volume_scale.set_draw_value(True)
+        self.volume_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        panel.pack_start(self.volume_scale, False, False, 0)
+
+        save = Gtk.Button(label="Save settings")
+        save.get_style_context().add_class("primary")
+        save.set_halign(Gtk.Align.START)
+        save.connect("clicked", self.save_system_settings)
+        panel.pack_start(save, False, False, 0)
+
+        note = Gtk.Label(label="Display and audio controls use the hardware interfaces available in this session.", xalign=0)
+        note.get_style_context().add_class("muted")
+        note.set_line_wrap(True)
+        page.pack_start(note, False, False, 0)
+        return page
+
+    def power_page(self):
+        page = self.page_shell("Power options", "Finished playing? Choose what happens next.")
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        panel.get_style_context().add_class("tile")
+        page.pack_start(panel, False, False, 0)
+        restart = Gtk.Button(label="↻   Restart Retro OS")
+        restart.get_style_context().add_class("secondary")
+        restart.set_halign(Gtk.Align.START)
+        restart.connect("clicked", lambda *_: self.confirm_power("reboot"))
+        panel.pack_start(restart, False, False, 0)
+        shutdown = Gtk.Button(label="⏻   Shut down")
+        shutdown.get_style_context().add_class("primary")
+        shutdown.set_halign(Gtk.Align.START)
+        shutdown.connect("clicked", lambda *_: self.confirm_power("poweroff"))
+        panel.pack_start(shutdown, False, False, 0)
+        return page
+
+    def on_nav(self, button, key):
+        if button.get_active():
+            self.show_page(key, update_nav=False)
+        elif self.stack and self.stack.get_visible_child_name() == key:
+            button.set_active(True)
+
+    def show_page(self, key, update_nav=True):
+        if key == "power":
+            # Power is a page with explicit confirmation, not an immediate action.
+            pass
+        self.stack.set_visible_child_name(key)
+        if update_nav:
+            for name, button in self.nav_buttons.items():
+                button.handler_block_by_func(self.on_nav)
+                button.set_active(name == key)
+                button.handler_unblock_by_func(self.on_nav)
+        if key == "library":
+            self.render_games()
+
+    def on_key(self, _window, event):
+        if event.keyval == Gdk.KEY_F11:
+            if self.window.get_window().get_state() & Gdk.WindowState.FULLSCREEN:
+                self.window.unfullscreen()
+            else:
+                self.window.fullscreen()
+            return True
+        if event.keyval == Gdk.KEY_Escape:
+            self.show_page("home")
+            return True
+        return False
+
+    def refresh_games(self):
+        folder = self.settings.get("library", str(DEFAULT_LIBRARY))
+        self.games = scan_games(folder)
+        self.cores = installed_cores()
+        if hasattr(self, "home_game_count"):
+            self.home_game_count.set_text(str(len(self.games)))
+            self.home_core_count.set_text(str(len(self.cores)))
+        if hasattr(self, "game_summary"):
+            self.game_summary.set_text(
+                f"{len(self.games)} games found  •  {len(self.cores)} Libretro cores installed  •  {folder}")
+            self.render_games()
+
+    def render_games(self):
+        if not hasattr(self, "game_list"):
+            return
+        for child in self.game_list.get_children():
+            self.game_list.remove(child)
+        query = self.game_search.get_text().casefold().strip() if hasattr(self, "game_search") else ""
+        shown = [p for p in self.games if query in p.name.casefold()]
+        if not shown:
+            empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            empty.set_border_width(28)
+            title = Gtk.Label(label="No games found", xalign=0)
+            title.get_style_context().add_class("section-title")
+            empty.pack_start(title, False, False, 0)
+            hint = Gtk.Label(label="Add your legally obtained game files to the library folder, then press Scan.", xalign=0)
+            hint.get_style_context().add_class("muted")
+            hint.set_line_wrap(True)
+            empty.pack_start(hint, False, False, 0)
+            self.game_list.pack_start(empty, False, False, 0)
+        else:
+            for path in shown[:500]:
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+                row.get_style_context().add_class("game-row")
+                icon = Gtk.Label(label="▣")
+                icon.set_markup('<span foreground="#50e3c2" size="x-large">▣</span>')
+                row.pack_start(icon, False, False, 4)
+                info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+                name = Gtk.Label(label=path.stem, xalign=0)
+                name.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+                name.get_style_context().add_class("section-title")
+                info.pack_start(name, False, False, 0)
+                meta = Gtk.Label(label=f"{path.suffix.lower()}  •  {path.parent}", xalign=0)
+                meta.get_style_context().add_class("muted")
+                meta.set_ellipsize(Pango.EllipsizeMode.START)
+                info.pack_start(meta, False, False, 0)
+                row.pack_start(info, True, True, 0)
+                launch = Gtk.Button(label="Play")
+                launch.get_style_context().add_class("primary")
+                launch.connect("clicked", self.launch_game, path)
+                row.pack_end(launch, False, False, 0)
+                self.game_list.pack_start(row, False, False, 0)
+        self.game_list.show_all()
+
+    def launch_game(self, _button, path):
+        retroarch = shutil.which("retroarch")
+        if not retroarch:
+            dialog(self.window, "RetroArch not found", "The RetroArch package is not available in this image.", Gtk.MessageType.ERROR)
+            return
+        core_path = None
+        for core_id in CORE_HINTS.get(path.suffix.lower(), ()):
+            if core_id in self.cores:
+                core_path = self.cores[core_id]
+                break
+        command = [retroarch]
+        if core_path:
+            command.extend(["-L", str(core_path)])
+        command.append(str(path))
+        try:
+            subprocess.Popen(command, start_new_session=True)
+        except OSError as error:
+            dialog(self.window, "Could not launch game", str(error), Gtk.MessageType.ERROR)
+
+    def choose_folder(self, *_):
+        chooser = Gtk.FileChooserDialog(title="Choose game library folder", parent=self.window,
+                                        action=Gtk.FileChooserAction.SELECT_FOLDER)
+        chooser.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Choose", Gtk.ResponseType.ACCEPT)
+        chooser.set_filename(self.folder_entry.get_text() or str(DEFAULT_LIBRARY))
+        if chooser.run() == Gtk.ResponseType.ACCEPT:
+            self.folder_entry.set_text(chooser.get_filename())
+        chooser.destroy()
+
+    def get_resolutions(self):
+        try:
+            result = subprocess.run(["xrandr"], capture_output=True, text=True, timeout=3)
+            modes = []
+            connected = False
+            for line in result.stdout.splitlines():
+                if " connected" in line:
+                    connected = True
+                    continue
+                if connected:
+                    match = re.match(r"\\s+(\\d{3,5}x\\d{3,5})(?:\\s|$)", line)
+                    if match and match.group(1) not in modes:
+                        modes.append(match.group(1))
+                    elif line and not line[0].isspace():
+                        connected = False
+            return modes or ["1280x720", "1920x1080"]
+        except (OSError, subprocess.SubprocessError):
+            return ["1280x720", "1920x1080"]
+
+    def get_volume(self):
+        try:
+            result = subprocess.run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
+                                    capture_output=True, text=True, timeout=3)
+            match = re.search(r"(\\d+)%", result.stdout)
+            return float(match.group(1)) if match else 70.0
+        except (OSError, subprocess.SubprocessError):
+            return 70.0
+
+    def save_system_settings(self, *_):
+        folder = self.folder_entry.get_text().strip()
+        if not folder:
+            dialog(self.window, "Library folder required", "Choose a folder for your games.", Gtk.MessageType.WARNING)
+            return
+        self.settings["library"] = str(Path(folder).expanduser())
+        try:
+            save_settings(self.settings)
+        except OSError as error:
+            dialog(self.window, "Could not save settings", str(error), Gtk.MessageType.ERROR)
+            return
+        mode = self.resolution_combo.get_active_text()
+        if mode:
+            try:
+                subprocess.run(["xrandr", "--output", self.get_active_output(), "--mode", mode],
+                               check=False, timeout=4, capture_output=True, text=True)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        volume = int(self.volume_scale.get_value())
+        try:
+            subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{volume}%"],
+                           check=False, timeout=4, capture_output=True, text=True)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        self.refresh_games()
+        dialog(self.window, "Settings saved", "Your library folder and available display/audio preferences have been applied.")
+
+    def get_active_output(self):
+        try:
+            result = subprocess.run(["xrandr"], capture_output=True, text=True, timeout=3)
+            for line in result.stdout.splitlines():
+                match = re.match(r"^(\\S+) connected", line)
+                if match:
+                    return match.group(1)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return "default"
+
+    def confirm_power(self, action):
+        title = "Restart Retro OS?" if action == "reboot" else "Shut down Retro OS?"
+        message = "Your session will close. Unsaved progress in running games may be lost."
+        box = Gtk.MessageDialog(transient_for=self.window, modal=True,
+                                message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.NONE, text=title)
+        box.format_secondary_text(message)
+        box.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        box.add_button("Continue", Gtk.ResponseType.ACCEPT)
+        response = box.run()
+        box.destroy()
+        if response == Gtk.ResponseType.ACCEPT:
+            command = ["systemctl", "reboot" if action == "reboot" else "poweroff"]
+            try:
+                subprocess.Popen(command, start_new_session=True)
+            except OSError as error:
+                dialog(self.window, "Power action failed", str(error), Gtk.MessageType.ERROR)
+
+def main():
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    app = RetroOS()
+    return app.run(None)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

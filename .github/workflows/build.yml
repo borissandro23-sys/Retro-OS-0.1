@@ -279,7 +279,7 @@ jobs:
               output.append(line)
           if not append_found:
               raise SystemExit("No APPEND line found in ISOLINUX configuration")
-          cfg.write_text("\\n".join(output) + "\\n")
+          cfg.write_text("\n".join(output) + "\n")
           print("Applied Retro OS graphical and quiet boot arguments to ISOLINUX")
           PY
           if [ -f /usr/lib/ISOLINUX/isolinux.bin ]; then

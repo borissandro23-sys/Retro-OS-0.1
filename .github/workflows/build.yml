@@ -25,7 +25,7 @@ jobs:
           command -v isohybrid
           isohybrid --help >/dev/null 2>&1 || true
           echo "Checking live-build ISO helper..."
-          sudo grep -n -C 4 'genisoimage\\|syslinux' /usr/lib/live/build/lb_binary_iso
+          sudo grep -n -C 4 'genisoimage\|syslinux' /usr/lib/live/build/lb_binary_iso
           sudo python3 - <<'PY'
           from pathlib import Path
           p = Path("/usr/lib/live/build/lb_binary_iso")
@@ -80,7 +80,7 @@ jobs:
               out.append(line)
           if count == 0:
               raise SystemExit("No binary/live move commands found in lb_binary_syslinux")
-          p.write_text("\\n".join(out) + "\\n")
+          p.write_text("\n".join(out) + "\n")
           print(f"Inserted diagnostics before {count} move command(s)")
           PY
           sudo grep -n -B 5 'mv binary/live/' /usr/lib/live/build/lb_binary_syslinux
@@ -96,25 +96,25 @@ jobs:
                   indent = line[:len(line) - len(line.lstrip())]
                   out.extend([
                       indent + "latest=$(find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' -printf '%f\\n' | sort -V | tail -n 1)",
-                      indent + "test -n \\"$latest\\"",
-                      indent + "find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' ! -name \\"$latest\\" -delete",
-                      indent + "mv \\"binary/live/$latest\\" binary/live/vmlinuz",
+                      indent + "test -n \"$latest\"",
+                      indent + "find binary/live -maxdepth 1 -type f -name 'vmlinuz-*' ! -name \"$latest\" -delete",
+                      indent + "mv \"binary/live/$latest\" binary/live/vmlinuz",
                   ])
                   patched["vmlinuz"] += 1
               elif stripped == "mv binary/live/initrd.img-* binary/live/initrd.img":
                   indent = line[:len(line) - len(line.lstrip())]
                   out.extend([
                       indent + "latest=$(find binary/live -maxdepth 1 -type f -name 'initrd.img-*' -printf '%f\\n' | sort -V | tail -n 1)",
-                      indent + "test -n \\"$latest\\"",
-                      indent + "find binary/live -maxdepth 1 -type f -name 'initrd.img-*' ! -name \\"$latest\\" -delete",
-                      indent + "mv \\"binary/live/$latest\\" binary/live/initrd.img",
+                      indent + "test -n \"$latest\"",
+                      indent + "find binary/live -maxdepth 1 -type f -name 'initrd.img-*' ! -name \"$latest\" -delete",
+                      indent + "mv \"binary/live/$latest\" binary/live/initrd.img",
                   ])
                   patched["initrd.img"] += 1
               else:
                   out.append(line)
           if patched != {"vmlinuz": 1, "initrd.img": 1}:
               raise SystemExit(f"Expected one kernel and one initrd move; found {patched}")
-          p.write_text("\\n".join(out) + "\\n")
+          p.write_text("\n".join(out) + "\n")
           print(f"Patched version selection: {patched}")
           PY
           sudo grep -n -A 4 'latest=$(find binary/live' /usr/lib/live/build/lb_binary_syslinux
@@ -126,7 +126,7 @@ jobs:
               raise SystemExit("Unexpected lb_binary_syslinux header")
           if len(lines) < 2 or lines[1].strip() != "set -x":
               lines.insert(1, "set -x")
-          p.write_text("\\n".join(lines) + "\\n")
+          p.write_text("\n".join(lines) + "\n")
           print("Enabled shell tracing in lb_binary_syslinux")
           PY
           sudo python3 - <<'PY'
@@ -226,15 +226,15 @@ jobs:
 
           [Service]
           Type=oneshot
-          ExecStart=/bin/sh -c 'id retro >/dev/null 2>&1 && printf "retro:live\\n" | chpasswd'
+          ExecStart=/bin/sh -c 'id retro >/dev/null 2>&1 && printf "retro:live\n" | chpasswd'
           RemainAfterExit=yes
 
           [Install]
           WantedBy=multi-user.target
           RETRO_PASSWORD
           ln -sf /etc/systemd/system/retro-password.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/retro-password.service
-          printf '%s\\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'plymouth' 'plymouth-themes' 'retroarch' 'lightdm' 'lightdm-gtk-greeter' 'openbox' 'xserver-xorg' 'xserver-xorg-video-all' 'xserver-xorg-input-all' 'xinit' 'x11-xserver-utils' 'libgl1-mesa-dri' 'sudo' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
-          printf '%s\\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
+          printf '%s\n' 'isolinux' 'librsvg2-bin' 'syslinux-utils' 'grub-efi-amd64-bin' 'plymouth' 'plymouth-themes' 'retroarch' 'lightdm' 'lightdm-gtk-greeter' 'openbox' 'xserver-xorg' 'xserver-xorg-video-all' 'xserver-xorg-input-all' 'xinit' 'x11-xserver-utils' 'libgl1-mesa-dri' 'sudo' 'dbus-x11' 'live-config' 'live-config-systemd' 'systemd-sysv' > config/package-lists/retro-os-bootloader.list.chroot
+          printf '%s\n' 'deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware' > config/includes.chroot/etc/apt/sources.list.d/retro-os-security.list
           lb config --ignore-system-defaults --mode debian --distribution bookworm --architectures amd64 --linux-packages linux-image --initramfs live-boot --security false --binary-images iso-hybrid --debian-installer false --archive-areas "main contrib non-free non-free-firmware" --apt-recommends true --keyring-packages debian-archive-keyring --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary http://deb.debian.org/debian --mirror-binary-security http://security.debian.org/debian-security --bootappend-live "boot=live components username=retro init=/lib/systemd/systemd systemd.unit=graphical.target quiet splash loglevel=3 systemd.show_status=false rd.udev.log_level=3 vt.global_cursor_default=0"
 
       - name: Prepare complete ISOLINUX bootloader theme
@@ -307,9 +307,9 @@ jobs:
           fi
           cp "$ISO_FILE" retro-os-live-amd64.iso
           ISO_LIST="$(xorriso -indev retro-os-live-amd64.iso -find / -type f -exec lsdl 2>&1)"
-          printf '%s\\n' "$ISO_LIST"
+          printf '%s\n' "$ISO_LIST"
           for REQUIRED in isolinux.bin vmlinuz initrd.img; do
-            if ! printf '%s\\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
+            if ! printf '%s\n' "$ISO_LIST" | grep -Fqi "$REQUIRED"; then
               echo "::error::$REQUIRED is missing from the generated ISO"
               exit 1
             fi
@@ -321,13 +321,13 @@ jobs:
         run: |
           mkdir -p boot-diagnostics
           echo "=== ISO metadata ==="
-          xorriso -indev retro-os-live-amd64.iso -pvd_info \\
+          xorriso -indev retro-os-live-amd64.iso -pvd_info \
             > boot-diagnostics/pvd-info.txt 2>&1 || true
 
           echo "=== Extract actual bootloader configuration from ISO ==="
           for FILE in isolinux.cfg live.cfg menu.cfg; do
-            if xorriso -osirrox on -indev retro-os-live-amd64.iso \\
-                 -extract "/isolinux/$FILE" "boot-diagnostics/$FILE" \\
+            if xorriso -osirrox on -indev retro-os-live-amd64.iso \
+                 -extract "/isolinux/$FILE" "boot-diagnostics/$FILE" \
                  > "boot-diagnostics/extract-$FILE.log" 2>&1; then
               echo "--- /isolinux/$FILE ---"
               cat -A "boot-diagnostics/$FILE"
@@ -338,31 +338,31 @@ jobs:
           done
 
           echo "=== ISOLINUX files in final ISO ==="
-          xorriso -indev retro-os-live-amd64.iso \\
-            -find /isolinux -type f -exec lsdl \\
+          xorriso -indev retro-os-live-amd64.iso \
+            -find /isolinux -type f -exec lsdl \
             > boot-diagnostics/isolinux-files.txt 2>&1 || true
           cat boot-diagnostics/isolinux-files.txt
 
           echo "=== El Torito boot catalog ==="
-          xorriso -indev retro-os-live-amd64.iso \\
-            -report_el_torito plain \\
+          xorriso -indev retro-os-live-amd64.iso \
+            -report_el_torito plain \
             > boot-diagnostics/eltorito.txt 2>&1 || true
           cat boot-diagnostics/eltorito.txt
 
           echo "=== ISO system area ==="
-          xorriso -indev retro-os-live-amd64.iso \\
-            -report_system_area plain \\
+          xorriso -indev retro-os-live-amd64.iso \
+            -report_system_area plain \
             > boot-diagnostics/system-area.txt 2>&1 || true
           cat boot-diagnostics/system-area.txt
 
           echo "=== Kernel and initrd entries ==="
-          xorriso -indev retro-os-live-amd64.iso \\
-            -find /live -type f -exec lsdl \\
+          xorriso -indev retro-os-live-amd64.iso \
+            -find /live -type f -exec lsdl \
             > boot-diagnostics/live-files.txt 2>&1 || true
           cat boot-diagnostics/live-files.txt
 
           echo "=== ISO checksum ==="
-          sha256sum retro-os-live-amd64.iso \\
+          sha256sum retro-os-live-amd64.iso \
             > boot-diagnostics/iso-sha256.txt 2>&1 || true
           cat boot-diagnostics/iso-sha256.txt
 

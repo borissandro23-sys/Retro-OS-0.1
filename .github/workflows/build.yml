@@ -246,42 +246,11 @@ jobs:
           fi
           test -d "$SOURCE"
           mkdir -p config/bootloaders/isolinux
+          # Keep Retro OS's own boot entry; the upstream theme has menu.cfg/live.cfg
+          # includes and does not place an APPEND line directly in isolinux.cfg.
+          cp config/bootloaders/isolinux/isolinux.cfg /tmp/retro-isolinux.cfg
           cp -a "$SOURCE/." config/bootloaders/isolinux/
-          # Re-apply Retro OS options after copying the upstream ISOLINUX template.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          cfg = Path("config/bootloaders/isolinux/isolinux.cfg")
-          lines = cfg.read_text().splitlines()
-          required = (
-              "boot=live",
-              "components",
-              "username=retro",
-              "systemd.unit=graphical.target",
-              "quiet",
-              "splash",
-              "loglevel=3",
-              "systemd.show_status=false",
-              "rd.udev.log_level=3",
-              "vt.global_cursor_default=0",
-          )
-          output = []
-          append_found = False
-          for line in lines:
-              if line.lstrip().startswith("SAY "):
-                  continue
-              if line.lstrip().startswith("APPEND "):
-                  append_found = True
-                  tokens = line.split()
-                  for token in required:
-                      if token not in tokens:
-                          line += " " + token
-              output.append(line)
-          if not append_found:
-              raise SystemExit("No APPEND line found in ISOLINUX configuration")
-          cfg.write_text("\n".join(output) + "\n")
-          print("Applied Retro OS graphical and quiet boot arguments to ISOLINUX")
-          PY
+          cp /tmp/retro-isolinux.cfg config/bootloaders/isolinux/isolinux.cfg
           if [ -f /usr/lib/ISOLINUX/isolinux.bin ]; then
             install -m 0644 /usr/lib/ISOLINUX/isolinux.bin config/bootloaders/isolinux/isolinux.bin
           elif [ -f /usr/lib/isolinux/isolinux.bin ]; then

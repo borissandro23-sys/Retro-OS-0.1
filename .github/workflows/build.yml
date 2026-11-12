@@ -20,7 +20,7 @@ jobs:
       - name: Install Debian Live build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux syslinux-common syslinux-utils isolinux cpio grub-efi-amd64-bin
+          sudo apt-get install -y live-build debootstrap debian-archive-keyring squashfs-tools xorriso syslinux syslinux-common syslinux-utils isolinux cpio grub-efi-amd64-bin python3-pil
           echo "Checking isohybrid availability..."
           command -v isohybrid
           isohybrid --help >/dev/null 2>&1 || true
@@ -148,6 +148,39 @@ jobs:
         run: |
           set -eu
           mkdir -p config/includes.chroot/etc/apt/sources.list.d
+          # Install the repository logo as a centered Plymouth boot splash.
+          mkdir -p config/includes.chroot/usr/share/plymouth/themes/retro-os
+          python3 - <<'PY'
+          from PIL import Image
+          source = Image.open("Gemini_Generated_Image_dwvu2tdwvu2tdwvu.jpg").convert("RGBA")
+          source.thumbnail((300, 300), Image.Resampling.LANCZOS)
+          source.save("config/includes.chroot/usr/share/plymouth/themes/retro-os/logo.png")
+          PY
+          cat > config/includes.chroot/usr/share/plymouth/themes/retro-os/retro-os.plymouth <<'PLYMOUTH_THEME'
+          [Plymouth Theme]
+          Name=Retro OS
+          Description=Retro OS 0.1 boot logo
+          ModuleName=script
+
+          [script]
+          ImageDir=/usr/share/plymouth/themes/retro-os
+          ScriptFile=/usr/share/plymouth/themes/retro-os/retro-os.script
+          PLYMOUTH_THEME
+          cat > config/includes.chroot/usr/share/plymouth/themes/retro-os/retro-os.script <<'PLYMOUTH_SCRIPT'
+          Window.SetBackgroundTopColor(0.0, 0.0, 0.0);
+          Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+
+          logo_image = Image("logo.png");
+          logo_sprite = Sprite(logo_image);
+          logo_sprite.SetX(Window.GetWidth() / 2 - logo_image.GetWidth() / 2);
+          logo_sprite.SetY(Window.GetHeight() / 2 - logo_image.GetHeight() / 2);
+          PLYMOUTH_SCRIPT
+          cat > config/includes.chroot/etc/plymouth/plymouthd.conf <<'PLYMOUTH_CONF'
+          [Daemon]
+          Theme=retro-os
+          ShowDelay=0
+          DeviceTimeout=8
+          PLYMOUTH_CONF
           mkdir -p config/includes.chroot/usr/bin
           cat > config/includes.chroot/usr/bin/rsvg <<'RSVG_WRAPPER'
           #!/bin/sh
